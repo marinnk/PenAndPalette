@@ -1,0 +1,23 @@
+# OS
+.DS_Store
+
+# Environment
+.env
+.env.local
+
+# Python / Django
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.sqlite3
+staticfiles/
+
+# Node / Vue
+node_modules/
+dist/
+.vite/
+
+# Editors
+.vscode/
+.idea/
