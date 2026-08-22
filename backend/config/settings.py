@@ -61,7 +61,10 @@ INSTALLED_APPS = [
     "rest_framework",
     "corsheaders",
     "core",
+    "users",
 ]
+
+AUTH_USER_MODEL = "users.User"
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
@@ -174,14 +177,20 @@ REST_FRAMEWORK = {
 }
 
 # djangorestframework-simplejwt
-# ログイン・リフレッシュ・ログアウトのビュー（Cookieの発行、DBでのリフレッシュトークン管理）は
-# F-1（ログイン機能）で実装する。ここではアクセストークンの検証に必要な設定のみを定義する
+# 基本設計書 3章: アクセストークンはsimplejwtで発行するJWT（有効期限15分）。
+# リフレッシュトークンはJWTではなく独自のopaqueトークン+DBテーブル（users.models.RefreshToken）
+# で管理するため、simplejwt自体のリフレッシュ・ブラックリスト機能は使わない
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
     "AUTH_COOKIE": "access_token",
 }
 
+AUTH_REFRESH_TOKEN_LIFETIME = timedelta(days=14)
+
+# HttpOnly Cookieのsecure属性。本番（DEBUG=False・HTTPS）では自動的にTrueになり、
+# ローカル開発（DEBUG=True・HTTP）では自動的にFalseになってCookieが届くようにする
+AUTH_COOKIE_SECURE = env_bool("AUTH_COOKIE_SECURE", default=not DEBUG)
 
 # django-cors-headers
 # 基本設計書 3.1節: 開発環境はVite(5173)とDjango(8000)の別オリジン間でCookieを送受信するため、
