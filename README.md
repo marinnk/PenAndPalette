@@ -13,23 +13,25 @@
 - [画面設計](docs/screen-design.md)：画面一覧・画面遷移・ワイヤーフレーム
 - [基本設計書](docs/basic-design.md)：技術スタック・データベース設計（ER図）など、どう作るか
 
-## 使用技術（予定）
+## 使用技術
 
-- バックエンド：Python / Django（Django REST Framework）
-- フロントエンド：Vue.js
+- バックエンド：Python / Django（Django REST Framework）、Lint/テストはruff・pytest-django
+- フロントエンド：Vue.js（TypeScript）、Lint/テストはESLint+Prettier・Vitest
 - データベース：MySQL
 - 画像ストレージ：Amazon S3（ローカル開発ではMinIOで代替）
 
-## プロジェクト構成（予定）
+## プロジェクト構成
 
 ```
 .
 ├── backend/    # Django（REST API）
 ├── frontend/   # Vue.js（画面）
 ├── docs/       # 要件定義・設計ドキュメント
-└── docker-compose.yml
+└── docker-compose.yml   # MySQL・MinIO（ローカル開発用）
 ```
+
+起動手順は[.claude/skills/run-app/SKILL.md](.claude/skills/run-app/SKILL.md)を参照してください。
 
 ## ステータス
 
-要件定義書・機能一覧・画面設計・基本設計書（ER図含む）まで完了。次は実装のセットアップを進めます。
+要件定義書・機能一覧・画面設計・基本設計書（ER図含む）に加え、開発環境の土台（backend/frontendの雛形、docker-compose、Lint/テスト環境）まで完了。機能（F-1ログインから順に）の実装はこれから進めます。

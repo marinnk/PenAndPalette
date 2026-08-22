@@ -48,13 +48,11 @@ npm install   # 初回・依存追加時のみ
 npm run dev
 ```
 
-※ 仮想環境の作り方（venv/poetry/uv等）・依存管理ファイル名は、バックエンドの実装セットアップ時に確定する。確定したらこの節を実際のコマンドに更新すること。
-
 ## 起動後の確認
 
 ```sh
-# バックエンドが8000で応答しているか（未ログインでも401が返れば起動確認としては十分）
-curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8000/api/auth/me
+# バックエンドが8000で応答しているか
+curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8000/api/health
 
 # フロントエンドが5173で応答しているか
 curl -s -o /dev/null -w "%{http_code}\n" http://localhost:5173/
@@ -64,15 +62,19 @@ curl -s -o /dev/null -w "%{http_code}\n" http://localhost:5173/
 
 ## バックエンドのテストとDBの関係（RaiseTechSNSとの違いに注意）
 
-RaiseTechSNS（Spring Boot）はTestcontainersにより、テスト実行時に使い捨てのPostgreSQLコンテナを自動起動するため、開発用DBコンテナが起動していなくてもテストが実行できた。**Djangoはこの前提が異なる**：Djangoのテストランナー（`python manage.py test` / `pytest`）は、`settings.py`の`DATABASES`設定に従い同じMySQLサーバーに接続し、その中に`test_`プレフィックス付きの一時DBを作成・マイグレーション適用・テスト後に破棄する。つまり**テスト実行前にも`docker compose up -d db`でDBコンテナを起動しておく必要がある**（開発用DBの中身自体は変更されない。別名の一時DBが使われるだけ）。
+RaiseTechSNS（Spring Boot）はTestcontainersにより、テスト実行時に使い捨てのPostgreSQLコンテナを自動起動するため、開発用DBコンテナが起動していなくてもテストが実行できた。**Djangoはこの前提が異なる**：Djangoのテストランナー（`pytest`）は、`settings.py`の`DATABASES`設定に従い同じMySQLサーバーに接続し、その中に`test_`プレフィックス付きの一時DBを作成・マイグレーション適用・テスト後に破棄する。つまり**テスト実行前にも`docker compose up -d db`でDBコンテナを起動しておく必要がある**（開発用DBの中身自体は変更されない。別名の一時DBが使われるだけ）。
 
 ## サンドボックス環境等でDockerが使えない場合
 
-Docker daemonが起動していない環境では、DBに依存する`runserver`・マイグレーション・テストは実行できない。その場合は以下に限定して確認し、DBが必要な検証はユーザー側の環境で行ってもらう。
+Docker daemonが起動していない環境では、DBに依存する`runserver`・マイグレーション・`pytest`は実行できない。その場合は以下に限定して確認し、DBが必要な検証はユーザー側の環境で行ってもらう。
 
 ```sh
 cd backend
-python3 -m py_compile $(find . -name '*.py' -not -path './.venv/*')   # 最低限の構文確認
+source .venv/bin/activate
+ruff check .              # Lint（DB不要）
+ruff format --check .     # フォーマット確認（DB不要）
+python -m py_compile $(find . -name '*.py' -not -path './.venv/*')   # 最低限の構文確認
+python manage.py check --skip-checks 2>/dev/null || true              # DB接続を伴うためエラーになりうる。参考程度
 ```
 
 ## ブラウザでの見た目確認（任意）

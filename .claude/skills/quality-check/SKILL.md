@@ -29,10 +29,11 @@ npm run build
 ```sh
 # バックエンド
 cd backend
-python manage.py test   # またはpytest（採用するテストランナーが確定したら更新する）
+source .venv/bin/activate
+ruff check .
+ruff format --check .
+pytest
 ```
-
-※ バックエンドのLintツール（ruff/flake8等）・テストランナー（pytest/Django標準TestCase）は実装セットアップ時に確定する。確定したらこの節・[CLAUDE.md](../../../CLAUDE.md)のコマンドを実際のものに更新すること。
 
 テストはMySQLへの接続を必要とする（[run-app skill](../run-app/SKILL.md)の「バックエンドのテストとDBの関係」参照）。Docker daemonが起動していない環境では、先に`docker compose up -d db`を実行する。
 
