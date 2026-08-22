@@ -17,7 +17,7 @@
 
 - バックエンド：Python / Django（Django REST Framework）
 - フロントエンド：Vue.js
-- データベース：PostgreSQL
+- データベース：MySQL
 - 画像ストレージ：Amazon S3（ローカル開発ではMinIOで代替）
 
 ## プロジェクト構成（予定）

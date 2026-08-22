@@ -13,7 +13,7 @@
 構成イメージ：
 
 ```
-[ブラウザ] ⇔ [フロントエンド: Vue.js] ⇔ (REST API) ⇔ [バックエンド: Django/DRF] ⇔ [DB: PostgreSQL]
+[ブラウザ] ⇔ [フロントエンド: Vue.js] ⇔ (REST API) ⇔ [バックエンド: Django/DRF] ⇔ [DB: MySQL]
                                                                     ⇕
                                                         [画像ストレージ: S3（開発時はMinIO）]
 ```
@@ -24,10 +24,10 @@
 |---|---|
 | バックエンド | Python / Django（Django REST Framework） |
 | フロントエンド | Vue.js |
-| データベース | PostgreSQL |
+| データベース | MySQL |
 | 画像ストレージ | Amazon S3（ローカル開発ではMinIOで代替） |
 
-姉妹プロジェクト[RaiseTechSNS](../../RaiseTechSNS)と同じインフラ構成（AWS上の構築方針等）を踏襲しつつ、使用言語・フレームワークを変えて実装する。バージョンやAPI設計などの詳細は、実装着手時にあらためて確定し本書を更新する。認証方式は3章のとおり確定済み。
+姉妹プロジェクト[RaiseTechSNS](../../RaiseTechSNS)と同じインフラ構成（AWS上の構築方針等）を踏襲しつつ、使用言語・フレームワークを変えて実装する（DBもRaiseTechSNSのPostgreSQLではなくMySQLを採用する）。バージョンやAPI設計などの詳細は、実装着手時にあらためて確定し本書を更新する。認証方式は3章のとおり確定済み。
 
 ## 3. 認証方式
 
@@ -67,6 +67,8 @@
 
 ### 4.2 テーブル定義
 
+日時カラムの型は`DATETIME`とする。MySQLには（PostgreSQLの`TIMESTAMPTZ`のような）タイムゾーン付きの型が無いため、Django側で`USE_TZ = True`のままUTCのnaive datetimeとして保存し、表示時にフロントエンド（またはDjango）でローカルタイムゾーンに変換する方針とする。
+
 #### users
 
 | カラム | 型 | 制約 | 説明 |
@@ -78,8 +80,8 @@
 | display_name | VARCHAR(50) | NOT NULL | |
 | bio | VARCHAR(160) | NULL可 | 自己紹介 |
 | avatar_url | VARCHAR(500) | NULL可 | アイコン画像のURL（S3） |
-| created_at | TIMESTAMPTZ | NOT NULL | |
-| updated_at | TIMESTAMPTZ | NOT NULL | |
+| created_at | DATETIME | NOT NULL | |
+| updated_at | DATETIME | NOT NULL | |
 
 #### posts
 
@@ -88,8 +90,8 @@
 | id | BIGINT | PK, AUTO_INCREMENT | |
 | user_id | BIGINT | FK→users.id, NOT NULL | 投稿者 |
 | body | VARCHAR(280) | NULL可 | 本文。画像のみの投稿の場合はNULL |
-| created_at | TIMESTAMPTZ | NOT NULL | |
-| updated_at | TIMESTAMPTZ | NOT NULL | |
+| created_at | DATETIME | NOT NULL | |
+| updated_at | DATETIME | NOT NULL | |
 
 「本文・画像の少なくとも一方が必要」というルールはDB制約ではなくアプリケーション側のバリデーションで実現する（`body`がNULLかつ紐づく`post_images`が0件の投稿を作成させない）。種別（小説／イラスト）やタイトルのカラムは持たない。
 
@@ -101,7 +103,7 @@
 | post_id | BIGINT | FK→posts.id, NOT NULL, ON DELETE CASCADE | 投稿削除時に画像も削除 |
 | image_url | VARCHAR(500) | NOT NULL | S3上の画像URL |
 | display_order | INT | NOT NULL | 投稿内での表示順（0始まり） |
-| created_at | TIMESTAMPTZ | NOT NULL | |
+| created_at | DATETIME | NOT NULL | |
 
 1つのpostにつき最大4件までに、アプリケーション側のバリデーションで制限する。
 
@@ -114,8 +116,8 @@
 | user_id | BIGINT | FK→users.id, NOT NULL | コメント者 |
 | content | VARCHAR(280) | NULL可 | 本文。画像のみのコメントの場合はNULL |
 | image_url | VARCHAR(500) | NULL可 | 添付画像のURL（S3、1枚まで） |
-| created_at | TIMESTAMPTZ | NOT NULL | |
-| updated_at | TIMESTAMPTZ | NOT NULL | 編集機能のために保持 |
+| created_at | DATETIME | NOT NULL | |
+| updated_at | DATETIME | NOT NULL | 編集機能のために保持 |
 
 「本文・画像の少なくとも一方が必要」は投稿と同様、アプリケーション側のバリデーションで実現する。
 
@@ -126,7 +128,7 @@
 | id | BIGINT | PK, AUTO_INCREMENT | |
 | post_id | BIGINT | FK→posts.id, NOT NULL, ON DELETE CASCADE | 投稿削除時にいいねも削除 |
 | user_id | BIGINT | FK→users.id, NOT NULL | いいねした利用者 |
-| created_at | TIMESTAMPTZ | NOT NULL | |
+| created_at | DATETIME | NOT NULL | |
 
 UNIQUE制約：(post_id, user_id) の組み合わせ（同じ利用者が同じ投稿に2回いいねできないようにする）
 
@@ -137,7 +139,7 @@ UNIQUE制約：(post_id, user_id) の組み合わせ（同じ利用者が同じ�
 | id | BIGINT | PK, AUTO_INCREMENT | |
 | post_id | BIGINT | FK→posts.id, NOT NULL, ON DELETE CASCADE | 投稿削除時にかきたいも削除 |
 | user_id | BIGINT | FK→users.id, NOT NULL | かきたいを付けた利用者 |
-| created_at | TIMESTAMPTZ | NOT NULL | |
+| created_at | DATETIME | NOT NULL | |
 
 UNIQUE制約：(post_id, user_id) の組み合わせ。テーブル構造はlikesと同一だが、いいねとは独立して付けられるため別テーブルとする。
 
@@ -148,7 +150,7 @@ UNIQUE制約：(post_id, user_id) の組み合わせ。テーブル構造はlike
 | id | BIGINT | PK, AUTO_INCREMENT | |
 | follower_id | BIGINT | FK→users.id, NOT NULL | フォローする利用者 |
 | followee_id | BIGINT | FK→users.id, NOT NULL | フォローされる利用者 |
-| created_at | TIMESTAMPTZ | NOT NULL | |
+| created_at | DATETIME | NOT NULL | |
 
 UNIQUE制約：(follower_id, followee_id) の組み合わせ。CHECK制約：follower_id ≠ followee_id（自分自身のフォロー禁止）
 
@@ -161,7 +163,7 @@ UNIQUE制約：(follower_id, followee_id) の組み合わせ。CHECK制約：fol
 | to_user_id | BIGINT | FK→users.id, NOT NULL | 宛先の利用者 |
 | related_post_id | BIGINT | FK→posts.id, NULL可, ON DELETE SET NULL | 参考にしてほしい投稿（任意） |
 | message | VARCHAR(280) | NOT NULL | 依頼内容 |
-| created_at | TIMESTAMPTZ | NOT NULL | |
+| created_at | DATETIME | NOT NULL | |
 
 CHECK制約：from_user_id ≠ to_user_id（自分自身へのリクエスト禁止）。承認・却下やスレッド化は行わないため、状態（ステータス）を表すカラムは持たない。「届いたリクエスト一覧」は`to_user_id`で絞り込んで取得する。参考にした投稿（`related_post_id`）が削除された場合は、リクエスト自体は削除せず`related_post_id`をNULLにする（ON DELETE SET NULL）。
 
@@ -172,9 +174,9 @@ CHECK制約：from_user_id ≠ to_user_id（自分自身へのリクエスト禁
 | id | BIGINT | PK, AUTO_INCREMENT | |
 | user_id | BIGINT | FK→users.id, NOT NULL | |
 | token_hash | VARCHAR(255) | NOT NULL, UNIQUE | トークンの生の値ではなくSHA-256ハッシュを保存 |
-| expires_at | TIMESTAMPTZ | NOT NULL | |
-| revoked_at | TIMESTAMPTZ | NULL可 | 失効済みの場合に日時が入る |
-| created_at | TIMESTAMPTZ | NOT NULL | |
+| expires_at | DATETIME | NOT NULL | |
+| revoked_at | DATETIME | NULL可 | 失効済みの場合に日時が入る |
+| created_at | DATETIME | NOT NULL | |
 
 1人のusersは複数のrefresh_tokensを持つ（同時に複数端末でログインしている場合など）。
 
@@ -205,22 +207,22 @@ erDiagram
         varchar display_name
         varchar bio
         varchar avatar_url
-        timestamptz created_at
-        timestamptz updated_at
+        datetime created_at
+        datetime updated_at
     }
     POSTS {
         bigint id PK
         bigint user_id FK
         varchar body
-        timestamptz created_at
-        timestamptz updated_at
+        datetime created_at
+        datetime updated_at
     }
     POST_IMAGES {
         bigint id PK
         bigint post_id FK
         varchar image_url
         int display_order
-        timestamptz created_at
+        datetime created_at
     }
     COMMENTS {
         bigint id PK
@@ -228,26 +230,26 @@ erDiagram
         bigint user_id FK
         varchar content
         varchar image_url
-        timestamptz created_at
-        timestamptz updated_at
+        datetime created_at
+        datetime updated_at
     }
     LIKES {
         bigint id PK
         bigint post_id FK
         bigint user_id FK
-        timestamptz created_at
+        datetime created_at
     }
     WANTS {
         bigint id PK
         bigint post_id FK
         bigint user_id FK
-        timestamptz created_at
+        datetime created_at
     }
     FOLLOWS {
         bigint id PK
         bigint follower_id FK
         bigint followee_id FK
-        timestamptz created_at
+        datetime created_at
     }
     REQUESTS {
         bigint id PK
@@ -255,15 +257,15 @@ erDiagram
         bigint to_user_id FK
         bigint related_post_id FK
         varchar message
-        timestamptz created_at
+        datetime created_at
     }
     REFRESH_TOKENS {
         bigint id PK
         bigint user_id FK
         varchar token_hash UK
-        timestamptz expires_at
-        timestamptz revoked_at
-        timestamptz created_at
+        datetime expires_at
+        datetime revoked_at
+        datetime created_at
     }
 ```
 
