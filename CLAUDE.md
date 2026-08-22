@@ -59,9 +59,8 @@ Claude Codeがこのリポジトリで作業する際に必ず守るルールで
 
 - 新しい機能を実装する際は、対応する自動テストも合わせて実装する
   - フロントエンド：Vitest + Vue Testing Library でコンポーネント・ロジックのテストを書く（`npm run test`）
-  - バックエンド：pytest（pytest-django）でビュー・シリアライザ・サービス層のテストを書く（`pytest` / `python manage.py test`）
-  - ※具体的なテストランナー・Lintツール（pytest vs Django標準TestCase、ruff vs flake8等）はバックエンドの実装セットアップ時に確定する。確定したら本節・[run-app skill](.claude/skills/run-app/SKILL.md)・[quality-check skill](.claude/skills/quality-check/SKILL.md)のコマンドを実際のものに更新すること
-- PRを作成する前に、フロントエンド（`npm run lint` / `npm run test`）・バックエンド（lint・testコマンド）を実行し、エラーが無いことを確認する
+  - バックエンド：pytest（pytest-django）でビュー・シリアライザ・サービス層のテストを書く（`pytest`）
+- PRを作成する前に、フロントエンド（`npm run lint` / `npm run test` / `npm run build`）・バックエンド（`ruff check .` / `ruff format --check .` / `pytest`）を実行し、エラーが無いことを確認する
 - コンポーネント・関数は単一の責務に絞る（データ取得・状態管理・画面表示を1ファイルに詰め込まない）
   - フロントエンド：APIとの通信・データ更新のロジックはcomposable（`useXxx`）に分離し、コンポーネントは受け取ったデータをどう表示するかに専念させる
   - バックエンド：ビュー（DRFの`APIView`/`ViewSet`）は薄く保ち、業務ロジックはサービス層・モデルメソッドに、入出力の検証・整形はシリアライザに分離する

@@ -1,0 +1,67 @@
+services:
+  db:
+    image: mysql:8.4
+    container_name: pen-and-palette-db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${DB_NAME:-pen_and_palette}
+      MYSQL_USER: ${DB_USER:-pen_and_palette}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-pen_and_palette}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root}
+    ports:
+      - "${DB_PORT:-3306}:3306"
+    volumes:
+      - db-data:/var/lib/mysql
+      - ./mysql-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "mysqladmin",
+          "ping",
+          "-h",
+          "localhost",
+          "-u",
+          "root",
+          "-p${DB_ROOT_PASSWORD:-root}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # 投稿・コメント・アイコン画像の保存先。ローカル開発では実際のAmazon S3の代わりに、
+  # S3互換のOSSであるMinIOを使う（AWSアカウント・課金なしで画像アップロードを動かして確認できる）。
+  # 本番環境では画像用S3バケットは非公開（CloudFrontのOAC経由でのみ配信、基本設計書7章）だが、
+  # ローカルにはCloudFront相当の配信経路が無いため、開発時に限り匿名読み取りを許可する
+  minio:
+    image: minio/minio:latest
+    container_name: pen-and-palette-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio-data:/data
+
+  # 起動後に一度だけ実行し、バケット作成と画像を匿名で読み取れるようにする設定を行う
+  # （ブラウザが<img src>で直接MinIOから画像を取得するため、GetObjectだけ公開する）
+  minio-init:
+    image: minio/mc:latest
+    container_name: pen-and-palette-minio-init
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      until mc alias set local http://minio:9000 ${MINIO_ROOT_USER:-minioadmin} ${MINIO_ROOT_PASSWORD:-minioadmin}; do sleep 1; done;
+      mc mb --ignore-existing local/${AWS_S3_BUCKET:-pen-and-palette-media};
+      mc anonymous set download local/${AWS_S3_BUCKET:-pen-and-palette-media};
+      exit 0;
+      "
+
+volumes:
+  db-data:
+  minio-data:
