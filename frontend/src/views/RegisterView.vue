@@ -29,10 +29,10 @@ async function handleSubmit() {
 </script>
 
 <template>
-  <main>
+  <main class="form-card">
     <h1>新規登録</h1>
     <form @submit.prevent="handleSubmit">
-      <div>
+      <div class="form-field">
         <label for="register-username">ユーザー名</label>
         <input
           id="register-username"
@@ -41,11 +41,16 @@ async function handleSubmit() {
           required
           data-testid="register-username"
         />
-        <p v-for="message in usernameErrors" :key="message" data-testid="register-username-error">
+        <p
+          v-for="message in usernameErrors"
+          :key="message"
+          class="field-error"
+          data-testid="register-username-error"
+        >
           {{ message }}
         </p>
       </div>
-      <div>
+      <div class="form-field">
         <label for="register-email">メールアドレス</label>
         <input
           id="register-email"
@@ -54,11 +59,16 @@ async function handleSubmit() {
           required
           data-testid="register-email"
         />
-        <p v-for="message in emailErrors" :key="message" data-testid="register-email-error">
+        <p
+          v-for="message in emailErrors"
+          :key="message"
+          class="field-error"
+          data-testid="register-email-error"
+        >
           {{ message }}
         </p>
       </div>
-      <div>
+      <div class="form-field">
         <label for="register-password">パスワード</label>
         <input
           id="register-password"
@@ -67,16 +77,28 @@ async function handleSubmit() {
           required
           data-testid="register-password"
         />
-        <p v-for="message in passwordErrors" :key="message" data-testid="register-password-error">
+        <p
+          v-for="message in passwordErrors"
+          :key="message"
+          class="field-error"
+          data-testid="register-password-error"
+        >
           {{ message }}
         </p>
       </div>
-      <p v-if="auth.errorMessage" data-testid="register-error">{{ auth.errorMessage }}</p>
-      <button type="submit" :disabled="auth.submitting" data-testid="register-submit">
+      <p v-if="auth.errorMessage" class="field-error" data-testid="register-error">
+        {{ auth.errorMessage }}
+      </p>
+      <button
+        type="submit"
+        class="form-submit"
+        :disabled="auth.submitting"
+        data-testid="register-submit"
+      >
         登録する
       </button>
     </form>
-    <p>
+    <p class="form-footer">
       <RouterLink :to="{ name: 'login' }" data-testid="register-to-login-link">
         ログイン画面に戻る
       </RouterLink>

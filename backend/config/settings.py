@@ -137,8 +137,10 @@ AUTH_PASSWORD_VALIDATORS = [
 
 # Internationalization
 # https://docs.djangoproject.com/en/6.1/topics/i18n/
+# Django/DRF標準のバリデーションメッセージ（必須項目未入力、パスワード強度等）を日本語で
+# 返すため"ja"にする（LocaleMiddlewareは使わず、常にこの言語で固定する単一言語アプリのため）
 
-LANGUAGE_CODE = "en-us"
+LANGUAGE_CODE = "ja"
 
 TIME_ZONE = "UTC"
 
