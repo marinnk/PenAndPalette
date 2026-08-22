@@ -12,6 +12,7 @@ services:
       - "${DB_PORT:-3306}:3306"
     volumes:
       - db-data:/var/lib/mysql
+      - ./mysql-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test:
         [
