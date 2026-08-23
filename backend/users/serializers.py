@@ -55,3 +55,14 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ["id", "username", "display_name", "avatar_url"]
+
+
+class UserProfileSerializer(serializers.ModelSerializer):
+    """GET /api/users/{id} のレスポンス（基本設計書6.6章のプロフィール取得の暫定narrowing）。
+
+    follower_count・following_count・followed_by_meはF-7（フォロー機能）実装時に追加する。
+    """
+
+    class Meta:
+        model = User
+        fields = ["id", "username", "display_name", "bio", "avatar_url"]

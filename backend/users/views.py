@@ -1,4 +1,5 @@
 from django.contrib.auth import authenticate
+from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -10,8 +11,13 @@ from users.cookies import (
     issue_auth_cookies,
     refresh_auth_cookies,
 )
-from users.models import InvalidRefreshToken, RefreshToken
-from users.serializers import LoginSerializer, RegisterSerializer, UserSerializer
+from users.models import InvalidRefreshToken, RefreshToken, User
+from users.serializers import (
+    LoginSerializer,
+    RegisterSerializer,
+    UserProfileSerializer,
+    UserSerializer,
+)
 
 # ログイン失敗時のメッセージ。メール未登録・パスワード誤りのどちらでも同じ文言にすることで、
 # メールアドレスの登録有無を外部から推測されないようにする（ユーザー列挙対策）
@@ -105,3 +111,11 @@ class MeView(APIView):
 
     def get(self, request):
         return Response(UserSerializer(request.user).data)
+
+
+class UserProfileView(APIView):
+    """GET /api/users/{user_id} 指定した利用者のプロフィールを取得する（基本設計書6.6章）。"""
+
+    def get(self, request, user_id):
+        user = get_object_or_404(User, pk=user_id)
+        return Response(UserProfileSerializer(user).data)

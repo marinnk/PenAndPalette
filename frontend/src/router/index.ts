@@ -1,28 +1,43 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import HomeView from '@/views/HomeView.vue'
+import TimelineView from '@/views/TimelineView.vue'
+import PostCreateView from '@/views/PostCreateView.vue'
+import PostDetailView from '@/views/PostDetailView.vue'
+import ProfileView from '@/views/ProfileView.vue'
 import LoginView from '@/views/LoginView.vue'
 import RegisterView from '@/views/RegisterView.vue'
 import { useAuthStore } from '@/stores/auth'
 
-// 画面設計書のS04以降のルートは、各機能を実装するIssueで追加する。
-// 現時点では疎通確認用のHome（将来S03タイムラインに置き換わる想定）と、
-// 今回実装するS01（ログイン）・S02（新規登録）のみ
+// 画面設計書のS06・S08・S09・S10は、各機能を実装するIssueで追加する。
+// 今回実装するのはS01（ログイン）・S02（新規登録）・S03（タイムライン）・
+// S04（投稿作成、スタブ）・S05（投稿詳細、スタブ）・S07（プロフィール、スタブ）
 export const router = createRouter({
   history: createWebHistory(),
   routes: [
-    { path: '/', name: 'home', component: HomeView },
+    { path: '/', name: 'timeline', component: TimelineView },
+    { path: '/posts/new', name: 'post-create', component: PostCreateView },
+    { path: '/posts/:id', name: 'post-detail', component: PostDetailView, props: true },
+    { path: '/profile/:id', name: 'profile', component: ProfileView, props: true },
     { path: '/login', name: 'login', component: LoginView },
     { path: '/register', name: 'register', component: RegisterView },
   ],
 })
 
-// ログイン済みの利用者が/login・/registerを開いた場合はホームへ戻す軽いガードのみ設ける。
-// 「未ログイン時に他画面へアクセスさせない」全画面共通のガードは、現状の/がまだ疎通確認用の
-// プレースホルダーでありS03（タイムライン）ではないため、今回のスコープでは実装しない
-// （次にタイムライン機能を実装する際、そちらのルートに合わせて導入する）
-router.beforeEach((to) => {
+// 未ログイン利用者はいずれの画面も利用できない（基本設計書5章）ため、
+// ログイン・新規登録以外へのアクセスは/loginへ、ログイン済みでのログイン・新規登録への
+// アクセスはタイムラインへ、それぞれリダイレクトする。
+// isCheckingSession中はGET /api/auth/meの完了を待ってから判定する
+// （待たないと、リロード直後にログイン済み利用者を誤って/loginへ弾いてしまう）
+router.beforeEach(async (to) => {
   const auth = useAuthStore()
-  if ((to.name === 'login' || to.name === 'register') && auth.currentUser) {
-    return { name: 'home' }
+  if (auth.isCheckingSession) {
+    await auth.fetchMe()
+  }
+
+  const isAuthRoute = to.name === 'login' || to.name === 'register'
+  if (isAuthRoute && auth.currentUser) {
+    return { name: 'timeline' }
+  }
+  if (!isAuthRoute && !auth.currentUser) {
+    return { name: 'login' }
   }
 })

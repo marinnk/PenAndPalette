@@ -349,6 +349,230 @@ code {
   font-weight: 500;
 }
 
+/* S03・S05・S07・S09共通ヘッダー（画面設計書1.5節） */
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 24px;
+  border-bottom: 1px solid var(--border);
+}
+
+.app-header-title {
+  color: var(--text-h);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.app-header-nav {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.app-header-nav a {
+  color: var(--text-h);
+  text-decoration: none;
+}
+
+.app-header-nav button {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font: inherit;
+  cursor: pointer;
+}
+
+/* S03 タイムライン画面（画面設計書114〜145行目） */
+.timeline {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 24px 16px 64px;
+}
+
+.timeline-compose-button {
+  width: auto;
+  padding: 10px 20px;
+  margin-bottom: 16px;
+}
+
+.timeline-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.timeline-tabs button {
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  padding: 8px 4px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+}
+
+.timeline-tabs button.active {
+  color: var(--text-h);
+  font-weight: 500;
+  border-bottom-color: var(--accent);
+}
+
+.new-post-banner {
+  display: block;
+  width: 100%;
+  margin-bottom: 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--accent-border);
+  border-radius: 6px;
+  background: var(--accent-bg);
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+  position: sticky;
+  top: 8px;
+  z-index: 1;
+}
+
+.empty-state {
+  color: var(--text);
+  padding: 32px 0;
+  text-align: center;
+}
+
+/* 投稿カード（S03/S05/S07で共通利用） */
+.post-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 12px;
+  cursor: pointer;
+}
+
+.post-card-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.post-card-author {
+  color: var(--text-h);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.post-card-meta {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.post-card-body {
+  margin: 0 0 12px;
+  color: var(--text-h);
+  white-space: pre-wrap;
+}
+
+.post-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 14px;
+}
+
+.post-card-actions button {
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.post-card-actions button.active {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.post-card-comment-count {
+  color: var(--text);
+}
+
+/* S04 投稿作成画面 */
+.post-compose-counter {
+  text-align: right;
+  font-size: 13px;
+  color: var(--text);
+  margin: 4px 0 0;
+}
+
+.form-field textarea {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-h);
+  background: var(--bg);
+  font: inherit;
+  resize: vertical;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.form-actions button {
+  font: inherit;
+  cursor: pointer;
+}
+
+.form-actions .form-submit {
+  width: auto;
+  margin-top: 0;
+  padding: 10px 20px;
+}
+
+/* S05 投稿詳細画面 */
+.post-detail {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 24px 16px 64px;
+}
+
+.post-detail > button {
+  display: block;
+  margin-bottom: 16px;
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+
+/* S07 プロフィール画面 */
+.profile {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 24px 16px 64px;
+}
+
+.profile-header {
+  margin-bottom: 24px;
+}
+
+.profile-header h1 {
+  font-size: 24px;
+  margin: 0 0 8px;
+}
+
 .ticks {
   position: relative;
   width: 100%;

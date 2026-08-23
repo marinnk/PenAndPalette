@@ -5,7 +5,7 @@ import { extractDetail, extractFieldErrors } from '@/lib/apiError'
 import type { AuthUser, LoginPayload, RegisterPayload } from '@/types/auth'
 
 // ログイン状態はアプリ全体で共有する必要があるためPiniaのstoreとして持つ。
-// setup構文（ref/関数を返す形）で書くため、既存のcomposable（useHealthCheck等）と
+// setup構文（ref/関数を返す形）で書くため、既存のcomposable（useTimeline等）と
 // ほぼ同じ形のまま、devtools連携等のPiniaの恩恵を受けられる
 export const useAuthStore = defineStore('auth', () => {
   const currentUser = ref<AuthUser | null>(null)

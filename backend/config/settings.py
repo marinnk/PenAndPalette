@@ -62,6 +62,7 @@ INSTALLED_APPS = [
     "corsheaders",
     "core",
     "users",
+    "posts",
 ]
 
 AUTH_USER_MODEL = "users.User"

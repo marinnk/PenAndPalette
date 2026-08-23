@@ -121,3 +121,33 @@ class RefreshToken(models.Model):
 
     class Meta:
         db_table = "refresh_tokens"
+
+
+class FollowManager(models.Manager):
+    def followee_ids(self, follower: "User"):
+        """followerがフォロー中の利用者のidを返す（F-2 タイムラインのscope=followingで使用）。"""
+        return self.filter(follower=follower).values_list("followee_id", flat=True)
+
+
+class Follow(models.Model):
+    """基本設計書 4.2章 followsテーブルに対応するモデル。
+
+    フォロー/フォロー解除のAPI・UI自体はF-7（フォロー機能）で実装する。今回はF-2（タイムライン）の
+    scope=followingによる絞り込みでのみ参照するため、このテーブルは当面空のまま
+    （＝「フォロー中」タブが自分の投稿のみを表示する）が、それは仕様どおりの暫定挙動である。
+    """
+
+    follower = models.ForeignKey(User, on_delete=models.CASCADE, related_name="following")
+    followee = models.ForeignKey(User, on_delete=models.CASCADE, related_name="followers")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    objects = FollowManager()
+
+    class Meta:
+        db_table = "follows"
+        constraints = [
+            models.UniqueConstraint(fields=["follower", "followee"], name="uniq_follow"),
+            models.CheckConstraint(
+                condition=~models.Q(follower=models.F("followee")), name="no_self_follow"
+            ),
+        ]
