@@ -4,9 +4,9 @@
   --bg: #fff;
   --border: #e5e4e7;
   --code-bg: #f4f3ec;
-  --accent: #aa3bff;
-  --accent-bg: rgba(170, 59, 255, 0.1);
-  --accent-border: rgba(170, 59, 255, 0.5);
+  --accent: #c07350;
+  --accent-bg: rgba(192, 115, 80, 0.1);
+  --accent-border: rgba(192, 115, 80, 0.5);
   --social-bg: rgba(244, 243, 236, 0.5);
   --shadow: rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
 
@@ -36,9 +36,9 @@
     --bg: #16171d;
     --border: #2e303a;
     --code-bg: #1f2028;
-    --accent: #c084fc;
-    --accent-bg: rgba(192, 132, 252, 0.15);
-    --accent-border: rgba(192, 132, 252, 0.5);
+    --accent: #e2916d;
+    --accent-bg: rgba(226, 145, 109, 0.15);
+    --accent-border: rgba(226, 145, 109, 0.5);
     --social-bg: rgba(47, 48, 58, 0.5);
     --shadow: rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
   }
@@ -267,6 +267,86 @@ code {
   @media (max-width: 1024px) {
     height: 48px;
   }
+}
+
+/* フォーム画面（S01ログイン・S02新規登録等）共通のカードレイアウト。
+   docs/screen-design.md のワイヤーフレーム（中央寄せのカード＋縦積みのラベル付き入力欄）に沿う */
+.form-card {
+  max-width: 420px;
+  margin: 64px auto;
+  padding: 32px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  text-align: left;
+}
+
+.form-card h1 {
+  font-size: 28px;
+  margin: 0 0 24px;
+  text-align: center;
+}
+
+.form-field {
+  margin-bottom: 20px;
+}
+
+.form-field label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--text-h);
+  font-size: 15px;
+}
+
+.form-field input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-h);
+  background: var(--bg);
+  font: inherit;
+}
+
+.form-field input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.field-error {
+  margin: 4px 0 0;
+  color: #d33;
+  font-size: 13px;
+}
+
+.form-submit {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.form-submit:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.form-footer {
+  margin-top: 20px;
+  text-align: center;
+  font-size: 14px;
+}
+
+.form-footer a {
+  color: var(--accent);
+  font-weight: 500;
 }
 
 .ticks {

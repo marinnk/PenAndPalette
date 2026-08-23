@@ -6,6 +6,11 @@ exclude = [".venv"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "W"]
 
+[tool.ruff.lint.per-file-ignores]
+# Django自動生成のmigrationファイルはPermissionsMixin等フレームワーク側のhelp_text文字列を
+# そのまま含み、内容を変えずに99字へ収めるのが非現実的なため、行長チェックのみ対象外にする
+"*/migrations/*.py" = ["E501"]
+
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "config.settings"
 python_files = ["tests.py", "test_*.py", "*_tests.py"]
