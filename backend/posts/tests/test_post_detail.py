@@ -1,7 +1,7 @@
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from posts.tests.conftest import create_post
+from posts.tests.conftest import create_post, create_post_image
 from users.tests.conftest import DEFAULT_PASSWORD, create_user
 
 
@@ -37,3 +37,11 @@ class PostDetailTests(APITestCase):
         response = self.client.get(f"/api/posts/{self.post.id + 999}")
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_detail_returns_image_urls(self):
+        create_post_image(self.post, image_url="https://example.com/detail.jpg", display_order=0)
+        self._login()
+
+        response = self.client.get(f"/api/posts/{self.post.id}")
+
+        self.assertEqual(response.json()["images"], ["https://example.com/detail.jpg"])

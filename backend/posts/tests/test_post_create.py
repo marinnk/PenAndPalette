@@ -1,7 +1,13 @@
+from django.core.files.uploadedfile import SimpleUploadedFile
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from posts.models import PostImage
 from users.tests.conftest import DEFAULT_PASSWORD, create_user
+
+
+def make_image(name="image.jpg", content_type="image/jpeg", content=b"jpeg-bytes"):
+    return SimpleUploadedFile(name, content, content_type=content_type)
 
 
 class PostCreateTests(APITestCase):
@@ -50,3 +56,94 @@ class PostCreateTests(APITestCase):
         response = self.client.post(self.url, {"body": "あ" * 281})
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_create_with_images_returns_201_with_urls(self):
+        self._login()
+
+        response = self.client.post(
+            self.url,
+            {
+                "body": "画像付き投稿",
+                "images": [make_image("a.jpg"), make_image("b.png", "image/png")],
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        body = response.json()
+        self.assertEqual(len(body["images"]), 2)
+        for url in body["images"]:
+            self.assertTrue(url)
+
+    def test_create_images_only_succeeds(self):
+        self._login()
+
+        response = self.client.post(self.url, {"images": [make_image()]}, format="multipart")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        body = response.json()
+        self.assertEqual(body["body"], "")
+        self.assertEqual(len(body["images"]), 1)
+
+    def test_create_without_body_or_images_returns_400(self):
+        self._login()
+
+        response = self.client.post(self.url, {}, format="multipart")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_create_with_more_than_4_images_returns_400(self):
+        self._login()
+
+        response = self.client.post(
+            self.url,
+            {"body": "5枚添付", "images": [make_image(f"{i}.jpg") for i in range(5)]},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_create_with_invalid_image_type_returns_400(self):
+        self._login()
+
+        response = self.client.post(
+            self.url,
+            {"body": "不正な形式", "images": [make_image("a.txt", "text/plain")]},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_create_with_oversized_image_returns_400(self):
+        self._login()
+        oversized = make_image(content=b"x" * (5 * 1024 * 1024 + 1))
+
+        response = self.client.post(
+            self.url, {"body": "5MB超過", "images": [oversized]}, format="multipart"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_create_preserves_image_order(self):
+        self._login()
+
+        response = self.client.post(
+            self.url,
+            {
+                "body": "順番確認",
+                "images": [
+                    make_image("first.jpg"),
+                    make_image("second.jpg"),
+                    make_image("third.jpg"),
+                ],
+            },
+            format="multipart",
+        )
+
+        post_id = response.json()["id"]
+        urls_in_order = list(
+            PostImage.objects.filter(post_id=post_id)
+            .order_by("display_order")
+            .values_list("image_url", flat=True)
+        )
+        self.assertEqual(urls_in_order, response.json()["images"])

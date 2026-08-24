@@ -204,6 +204,32 @@ CORS_ALLOW_CREDENTIALS = True
 
 # 画像ストレージ（Amazon S3 / 開発時はMinIO）
 # 基本設計書 1〜2章・6.3節: プロキシアップロード方式
-# （署名付きURLではなくサーバー経由でS3に書き込む）。
-# django-storages・boto3は導入済みだが、STORAGES設定はFileFieldを持つ最初の機能
-# （投稿画像・コメント画像・アバターのいずれか）を実装する際に、バケット構成とあわせて確定する
+# （署名付きURLではなくサーバー経由でS3/MinIOに書き込む）。
+# docker-compose.ymlのminioサービスはバケットを匿名read公開しているため、
+# querystring_auth=Falseで署名なしの素のURLを生成する。addressing_style="path"は
+# MinIOがvirtual-hosted-style（バケット名をホスト名の一部にする）に対応していないため必須
+AWS_S3_BUCKET = os.environ.get("AWS_S3_BUCKET", "pen-and-palette-media")
+# 本番のAmazon S3では未設定のままにし、boto3のデフォルトエンドポイントを使わせる。
+# ローカル開発は.envでMinIOのURLを指定する
+AWS_S3_ENDPOINT_URL = os.environ.get("AWS_S3_ENDPOINT_URL") or None
+AWS_ACCESS_KEY_ID = os.environ.get("AWS_ACCESS_KEY_ID", "minioadmin")
+AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY", "minioadmin")
+AWS_S3_REGION_NAME = os.environ.get("AWS_S3_REGION_NAME", "us-east-1")
+
+STORAGES = {
+    "default": {
+        "BACKEND": "storages.backends.s3boto3.S3Boto3Storage",
+        "OPTIONS": {
+            "bucket_name": AWS_S3_BUCKET,
+            "endpoint_url": AWS_S3_ENDPOINT_URL,
+            "access_key": AWS_ACCESS_KEY_ID,
+            "secret_key": AWS_SECRET_ACCESS_KEY,
+            "region_name": AWS_S3_REGION_NAME,
+            "addressing_style": "path",
+            "querystring_auth": False,
+            "file_overwrite": False,
+            "default_acl": None,  # MinIOはACL未対応。読み取り公開はminio-init側で設定済み
+        },
+    },
+    "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+}

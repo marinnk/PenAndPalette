@@ -1,10 +1,33 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePostCreate } from '@/composables/usePostCreate'
 
-// S04 投稿作成画面（今回は本文のみのスタブ。画像添付は画像対応Issueで追加する）
+// S04 投稿作成画面
 const router = useRouter()
-const { body, submitting, errorMessage, fieldErrors, submit } = usePostCreate()
+const {
+  body,
+  images,
+  imagePreviews,
+  submitting,
+  errorMessage,
+  fieldErrors,
+  addImage,
+  removeImage,
+  submit,
+} = usePostCreate()
+
+const imagePickError = ref<string | null>(null)
+
+function onFileSelected(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (file) {
+    imagePickError.value = addImage(file)
+  }
+  // 同じファイルを削除後に再度選び直せるよう、inputの値をクリアしておく
+  input.value = ''
+}
 
 async function handleSubmit() {
   const post = await submit()
@@ -37,6 +60,48 @@ async function handleSubmit() {
           {{ message }}
         </p>
       </div>
+
+      <div class="form-field">
+        <label>画像（任意・1〜4枚）</label>
+        <div class="post-compose-images">
+          <div
+            v-for="(preview, i) in imagePreviews"
+            :key="preview"
+            class="post-compose-image-slot"
+          >
+            <img :src="preview" :alt="`添付画像${i + 1}`" />
+            <button
+              type="button"
+              :data-testid="`post-image-remove-${i}`"
+              @click="removeImage(i)"
+            >
+              削除
+            </button>
+          </div>
+          <label v-if="images.length < 4" class="post-compose-image-add" data-testid="post-image-add">
+            追加
+            <input
+              type="file"
+              accept="image/jpeg,image/png"
+              class="visually-hidden"
+              data-testid="post-image-input"
+              @change="onFileSelected"
+            />
+          </label>
+        </div>
+        <p v-if="imagePickError" class="field-error" data-testid="post-image-pick-error">
+          {{ imagePickError }}
+        </p>
+        <p
+          v-for="message in fieldErrors.images ?? []"
+          :key="message"
+          class="field-error"
+          data-testid="post-image-error"
+        >
+          {{ message }}
+        </p>
+      </div>
+
       <p v-if="errorMessage" class="field-error" data-testid="post-create-error">
         {{ errorMessage }}
       </p>
@@ -51,7 +116,7 @@ async function handleSubmit() {
         <button
           type="submit"
           class="form-submit"
-          :disabled="submitting || body.trim().length === 0"
+          :disabled="submitting || (body.trim().length === 0 && images.length === 0)"
           data-testid="post-create-submit"
         >
           投稿する

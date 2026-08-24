@@ -8,6 +8,10 @@ vi.mock('@/lib/apiClient', () => ({
   apiClient: { get: vi.fn(), post: vi.fn(), delete: vi.fn() },
 }))
 
+// jsdomはURL.createObjectURL/revokeObjectURLを実装していないため最小限のスタブを用意する
+URL.createObjectURL = vi.fn(() => 'blob:mock-url')
+URL.revokeObjectURL = vi.fn()
+
 const TimelineStub = { template: '<div>timeline</div>' }
 
 function renderPostCreateView() {
@@ -21,6 +25,15 @@ function renderPostCreateView() {
   router.push({ name: 'post-create' })
   const result = render(PostCreateView, { global: { plugins: [router] } })
   return { ...result, router }
+}
+
+function makeFile(name = 'a.jpg', type = 'image/jpeg', size = 1024) {
+  return new File([new Uint8Array(size)], name, { type })
+}
+
+async function selectImage(file: File) {
+  const input = screen.getByTestId('post-image-input')
+  await fireEvent.change(input, { target: { files: [file] } })
 }
 
 beforeEach(() => {
@@ -45,7 +58,7 @@ describe('PostCreateView', () => {
     await fireEvent.click(screen.getByTestId('post-create-submit'))
 
     await waitFor(() => {
-      expect(apiClient.post).toHaveBeenCalledWith('/api/posts', { body: 'テスト' })
+      expect(apiClient.post).toHaveBeenCalledWith('/api/posts', expect.any(FormData))
       expect(router.currentRoute.value.name).toBe('timeline')
     })
   })
@@ -73,5 +86,46 @@ describe('PostCreateView', () => {
     await waitFor(() => {
       expect(router.currentRoute.value.name).toBe('timeline')
     })
+  })
+
+  it('画像を選ぶとプレビューが表示され、削除ボタンで取り消せる', async () => {
+    renderPostCreateView()
+
+    await selectImage(makeFile())
+
+    expect(screen.getByTestId('post-image-remove-0')).toBeInTheDocument()
+
+    await fireEvent.click(screen.getByTestId('post-image-remove-0'))
+
+    expect(screen.queryByTestId('post-image-remove-0')).not.toBeInTheDocument()
+  })
+
+  it('本文が空でも画像があれば投稿ボタンが有効になる', async () => {
+    renderPostCreateView()
+
+    await selectImage(makeFile())
+
+    expect(screen.getByTestId('post-create-submit')).not.toBeDisabled()
+  })
+
+  it('4枚選択すると追加枠が消える', async () => {
+    renderPostCreateView()
+
+    for (let i = 0; i < 4; i++) {
+      await selectImage(makeFile(`${i}.jpg`))
+    }
+
+    expect(screen.queryByTestId('post-image-add')).not.toBeInTheDocument()
+  })
+
+  it('jpg/png以外の画像を選ぶとピックエラーが表示され送信されない', async () => {
+    renderPostCreateView()
+
+    await selectImage(makeFile('a.gif', 'image/gif'))
+
+    expect(screen.getByTestId('post-image-pick-error')).toHaveTextContent(
+      '画像はjpgまたはpng形式のみ添付できます。',
+    )
+    expect(screen.queryByTestId('post-image-remove-0')).not.toBeInTheDocument()
   })
 })

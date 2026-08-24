@@ -1,7 +1,7 @@
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from posts.tests.conftest import create_post
+from posts.tests.conftest import create_post, create_post_image
 from users.models import Follow
 from users.tests.conftest import DEFAULT_PASSWORD, create_user
 
@@ -173,3 +173,14 @@ class PostListTests(APITestCase):
         self.assertEqual(row["like_count"], 2)
         self.assertEqual(row["want_count"], 1)
         self.assertFalse(row["liked_by_me"])
+
+    def test_list_returns_image_urls_in_display_order(self):
+        self._login()
+        post = create_post(self.user, body="画像付き投稿")
+        create_post_image(post, image_url="https://example.com/2.jpg", display_order=1)
+        create_post_image(post, image_url="https://example.com/1.jpg", display_order=0)
+
+        response = self.client.get(self.url)
+
+        row = next(r for r in response.json()["results"] if r["id"] == post.id)
+        self.assertEqual(row["images"], ["https://example.com/1.jpg", "https://example.com/2.jpg"])
