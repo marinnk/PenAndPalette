@@ -18,6 +18,16 @@ export default tseslint.config(
   },
   eslintConfigPrettier,
   {
+    languageOptions: {
+      // タイムライン画面の無限スクロール・新着通知バナー等で使うブラウザ標準API
+      globals: {
+        window: 'readonly',
+        document: 'readonly',
+        HTMLElement: 'readonly',
+        IntersectionObserver: 'readonly',
+        IntersectionObserverEntry: 'readonly',
+      },
+    },
     rules: {
       // 単一責務のルールに沿って、コンポーネントを小さく保つことを促す
       'vue/multi-word-component-names': 'off',

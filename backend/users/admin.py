@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 
-from users.models import User
+from users.models import Follow, User
 
 
 @admin.register(User)
@@ -30,3 +30,11 @@ class UserAdmin(DjangoUserAdmin):
             },
         ),
     )
+
+
+@admin.register(Follow)
+class FollowAdmin(admin.ModelAdmin):
+    """開発時にDBの中身を確認するための最小限の登録（F-7でフォロー機能を実装するまでは
+    このテーブルは空のまま）。"""
+
+    list_display = ["id", "follower", "followee", "created_at"]

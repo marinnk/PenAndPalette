@@ -14,7 +14,7 @@ const password = ref('')
 async function handleSubmit() {
   const success = await auth.login({ email: email.value, password: password.value })
   if (success) {
-    router.push({ name: 'home' })
+    router.push({ name: 'timeline' })
   }
 }
 </script>

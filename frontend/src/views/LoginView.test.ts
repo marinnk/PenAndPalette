@@ -5,11 +5,13 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import { apiClient } from '@/lib/apiClient'
 import LoginView from './LoginView.vue'
 import RegisterView from './RegisterView.vue'
-import HomeView from './HomeView.vue'
 
 vi.mock('@/lib/apiClient', () => ({
   apiClient: { get: vi.fn(), post: vi.fn() },
 }))
+
+// タイムライン画面自体の描画は他テストの責務のため、遷移先確認用の最小限のダミーで済ませる
+const TimelineStub = { template: '<div>timeline</div>' }
 
 function renderLoginView() {
   const pinia = createPinia()
@@ -17,7 +19,7 @@ function renderLoginView() {
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
-      { path: '/', name: 'home', component: HomeView },
+      { path: '/', name: 'timeline', component: TimelineStub },
       { path: '/login', name: 'login', component: LoginView },
       { path: '/register', name: 'register', component: RegisterView },
     ],
@@ -44,7 +46,7 @@ describe('LoginView', () => {
     await fireEvent.click(screen.getByTestId('login-submit'))
 
     await waitFor(() => {
-      expect(router.currentRoute.value.name).toBe('home')
+      expect(router.currentRoute.value.name).toBe('timeline')
     })
   })
 
