@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/vue'
 import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
@@ -8,7 +8,7 @@ import TimelineView from './TimelineView.vue'
 import type { Post } from '@/types/post'
 
 vi.mock('@/lib/apiClient', () => ({
-  apiClient: { get: vi.fn(), post: vi.fn(), delete: vi.fn() },
+  apiClient: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() },
 }))
 
 // jsdomにはIntersectionObserverが無いため最小限のスタブを用意する
@@ -29,6 +29,7 @@ function makePost(id: number, overrides: Partial<Post> = {}): Post {
     author: { id: 1, username: 'author', display_name: '投稿者', avatar_url: null },
     body: `投稿${id}`,
     images: [],
+    image_ids: [],
     like_count: 0,
     want_count: 0,
     comment_count: 0,
@@ -62,6 +63,12 @@ function renderTimelineView() {
 beforeEach(() => {
   vi.mocked(apiClient.get).mockReset()
   vi.mocked(apiClient.post).mockReset()
+  vi.mocked(apiClient.delete).mockReset()
+  vi.spyOn(window, 'confirm').mockReturnValue(true)
+})
+
+afterEach(() => {
+  vi.restoreAllMocks()
 })
 
 describe('TimelineView', () => {
@@ -138,6 +145,41 @@ describe('TimelineView', () => {
     })
 
     vi.useRealTimers()
+  })
+
+  it('自分の投稿の削除ボタン→確認後に一覧からその場で取り除かれる', async () => {
+    vi.mocked(apiClient.get).mockResolvedValueOnce({
+      data: { results: [makePost(1), makePost(2)], has_more: false },
+    })
+    const { router } = renderTimelineView()
+    await router.isReady()
+    await waitFor(() => expect(screen.getByText('投稿1')).toBeInTheDocument())
+
+    vi.mocked(apiClient.delete).mockResolvedValueOnce({})
+    await fireEvent.click(screen.getByTestId('delete-button-1'))
+
+    await waitFor(() => {
+      expect(apiClient.delete).toHaveBeenCalledWith('/api/posts/1')
+      expect(screen.queryByText('投稿1')).not.toBeInTheDocument()
+      expect(screen.getByText('投稿2')).toBeInTheDocument()
+    })
+  })
+
+  it('削除に失敗した場合はエラーメッセージを表示し一覧はそのまま', async () => {
+    vi.mocked(apiClient.get).mockResolvedValueOnce({
+      data: { results: [makePost(1)], has_more: false },
+    })
+    const { router } = renderTimelineView()
+    await router.isReady()
+    await waitFor(() => expect(screen.getByText('投稿1')).toBeInTheDocument())
+
+    vi.mocked(apiClient.delete).mockRejectedValueOnce(new Error('network error'))
+    await fireEvent.click(screen.getByTestId('delete-button-1'))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('delete-error')).toBeInTheDocument()
+      expect(screen.getByText('投稿1')).toBeInTheDocument()
+    })
   })
 
   it('「投稿する」ボタンから投稿作成画面へ遷移する', async () => {

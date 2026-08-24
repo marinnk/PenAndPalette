@@ -6,6 +6,8 @@ export interface Post {
   author: AuthUser
   body: string
   images: string[]
+  // imagesと同じ並び順のid配列。投稿編集画面で「残す既存画像」を指定するkeep_image_idsに使う
+  image_ids: number[]
   like_count: number
   want_count: number
   comment_count: number

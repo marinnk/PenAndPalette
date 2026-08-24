@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 import { apiClient } from '@/lib/apiClient'
 import { useReactablePosts } from '@/composables/usePostReactions'
+import { useDeletablePosts } from '@/composables/usePostDelete'
 import type { Post, PostListResponse } from '@/types/post'
 import type { Profile } from '@/types/profile'
 
@@ -12,6 +13,7 @@ export function useProfile() {
   const error = ref(false)
 
   const { reactionError, isPending, toggleLike, toggleWant } = useReactablePosts(posts)
+  const { deleteError, isDeleting, deletePost } = useDeletablePosts(posts)
 
   async function load(userId: number) {
     loading.value = true
@@ -30,5 +32,18 @@ export function useProfile() {
     }
   }
 
-  return { profile, posts, loading, error, reactionError, isPending, load, toggleLike, toggleWant }
+  return {
+    profile,
+    posts,
+    loading,
+    error,
+    reactionError,
+    isPending,
+    deleteError,
+    isDeleting,
+    load,
+    toggleLike,
+    toggleWant,
+    deletePost,
+  }
 }

@@ -15,6 +15,7 @@ function makePost(id: number, overrides: Partial<Post> = {}): Post {
     author: { id: 1, username: 'taro', display_name: '太郎', avatar_url: null },
     body: `投稿${id}`,
     images: [],
+    image_ids: [],
     like_count: 0,
     want_count: 0,
     comment_count: 0,

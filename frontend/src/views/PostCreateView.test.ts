@@ -55,7 +55,7 @@ describe('PostCreateView', () => {
     await router.isReady()
 
     await fireEvent.update(screen.getByTestId('post-body'), 'テスト')
-    await fireEvent.click(screen.getByTestId('post-create-submit'))
+    await fireEvent.click(screen.getByTestId('post-compose-submit'))
 
     await waitFor(() => {
       expect(apiClient.post).toHaveBeenCalledWith('/api/posts', expect.any(FormData))
@@ -66,7 +66,7 @@ describe('PostCreateView', () => {
   it('本文が空のときは投稿ボタンがdisabledになる', () => {
     renderPostCreateView()
 
-    expect(screen.getByTestId('post-create-submit')).toBeDisabled()
+    expect(screen.getByTestId('post-compose-submit')).toBeDisabled()
   })
 
   it('本文が空白のみのときも投稿ボタンがdisabledになる（バックエンドのtrim検証と一致させる）', async () => {
@@ -74,14 +74,14 @@ describe('PostCreateView', () => {
 
     await fireEvent.update(screen.getByTestId('post-body'), '   ')
 
-    expect(screen.getByTestId('post-create-submit')).toBeDisabled()
+    expect(screen.getByTestId('post-compose-submit')).toBeDisabled()
   })
 
   it('キャンセルでタイムラインへ戻る', async () => {
     const { router } = renderPostCreateView()
     await router.isReady()
 
-    await fireEvent.click(screen.getByTestId('post-create-cancel'))
+    await fireEvent.click(screen.getByTestId('post-compose-cancel'))
 
     await waitFor(() => {
       expect(router.currentRoute.value.name).toBe('timeline')
@@ -105,7 +105,7 @@ describe('PostCreateView', () => {
 
     await selectImage(makeFile())
 
-    expect(screen.getByTestId('post-create-submit')).not.toBeDisabled()
+    expect(screen.getByTestId('post-compose-submit')).not.toBeDisabled()
   })
 
   it('4枚選択すると追加枠が消える', async () => {

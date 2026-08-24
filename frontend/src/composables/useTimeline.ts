@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 import { apiClient } from '@/lib/apiClient'
 import { useReactablePosts } from '@/composables/usePostReactions'
+import { useDeletablePosts } from '@/composables/usePostDelete'
 import type { Post, PostListResponse, TimelineScope } from '@/types/post'
 
 const POLL_INTERVAL_MS = 30_000
@@ -20,6 +21,7 @@ export function useTimeline() {
   const newPostCount = ref(0)
 
   const { reactionError, isPending, toggleLike, toggleWant } = useReactablePosts(posts)
+  const { deleteError, isDeleting, deletePost } = useDeletablePosts(posts)
 
   let pendingNewPosts: Post[] = []
   // ポーリングの基準id。0は「まだ投稿が無い」を表し、after_id=0は全件取得と等価になるため
@@ -112,11 +114,14 @@ export function useTimeline() {
     newPostCount,
     reactionError,
     isPending,
+    deleteError,
+    isDeleting,
     load,
     loadMore,
     revealNewPosts,
     toggleLike,
     toggleWant,
+    deletePost,
     stopPolling,
   }
 }

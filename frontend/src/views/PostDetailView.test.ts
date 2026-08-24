@@ -7,7 +7,7 @@ import { useAuthStore } from '@/stores/auth'
 import PostDetailView from './PostDetailView.vue'
 
 vi.mock('@/lib/apiClient', () => ({
-  apiClient: { get: vi.fn(), post: vi.fn(), delete: vi.fn() },
+  apiClient: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() },
 }))
 
 const TimelineStub = { template: '<div>timeline</div>' }
@@ -33,11 +33,11 @@ const basePost = {
   updated_at: '2026-08-23T00:00:00Z',
 }
 
-async function renderPostDetailView(id = '1') {
+async function renderPostDetailView(id = '1', currentUserId = 1) {
   const pinia = createPinia()
   setActivePinia(pinia)
   const auth = useAuthStore()
-  auth.currentUser = { id: 1, username: 'taro', display_name: '太郎', avatar_url: null }
+  auth.currentUser = { id: currentUserId, username: 'taro', display_name: '太郎', avatar_url: null }
 
   const router = createRouter({
     history: createMemoryHistory(),
@@ -136,6 +136,38 @@ describe('PostDetailView', () => {
     await fireEvent.click(screen.getByTestId('post-card-1'))
 
     expect(router.currentRoute.value.name).toBe('post-detail')
+  })
+
+  it('自分の投稿の削除ボタン→確認後にタイムラインへ遷移する', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: makePost() })
+    const { router } = await renderPostDetailView('1', 7) // currentUser.id === post.author.id
+    await waitFor(() => screen.getByText('投稿本文'))
+
+    vi.mocked(apiClient.delete).mockResolvedValueOnce({})
+    await fireEvent.click(screen.getByTestId('delete-button-1'))
+
+    await waitFor(() => {
+      expect(apiClient.delete).toHaveBeenCalledWith('/api/posts/1')
+      expect(router.currentRoute.value.name).toBe('timeline')
+    })
+    vi.restoreAllMocks()
+  })
+
+  it('削除に失敗した場合はエラーメッセージを表示しタイムラインへ遷移しない', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: makePost() })
+    const { router } = await renderPostDetailView('1', 7)
+    await waitFor(() => screen.getByText('投稿本文'))
+
+    vi.mocked(apiClient.delete).mockRejectedValueOnce(new Error('network error'))
+    await fireEvent.click(screen.getByTestId('delete-button-1'))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('delete-error')).toBeInTheDocument()
+    })
+    expect(router.currentRoute.value.name).toBe('post-detail')
+    vi.restoreAllMocks()
   })
 
   it('別の投稿idへ遷移すると読み込みし直される', async () => {

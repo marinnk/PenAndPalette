@@ -11,8 +11,20 @@ import { useAuthStore } from '@/stores/auth'
 const props = defineProps<{ id: string }>()
 const router = useRouter()
 const auth = useAuthStore()
-const { profile, posts, loading, error, reactionError, isPending, load, toggleLike, toggleWant } =
-  useProfile()
+const {
+  profile,
+  posts,
+  loading,
+  error,
+  reactionError,
+  isPending,
+  deleteError,
+  isDeleting,
+  load,
+  toggleLike,
+  toggleWant,
+  deletePost,
+} = useProfile()
 
 const isOwnProfile = computed(() => auth.currentUser?.id === Number(props.id))
 
@@ -49,6 +61,9 @@ watch(
         <p v-if="reactionError" class="field-error" data-testid="reaction-error">
           {{ reactionError }}
         </p>
+        <p v-if="deleteError" class="field-error" data-testid="delete-error">
+          {{ deleteError }}
+        </p>
 
         <h2>{{ profile.display_name }}の投稿</h2>
         <p v-if="posts.length === 0" class="empty-state" data-testid="profile-posts-empty">
@@ -58,9 +73,10 @@ watch(
           v-for="post in posts"
           :key="post.id"
           :post="post"
-          :pending="isPending(post.id)"
+          :pending="isPending(post.id) || isDeleting(post.id)"
           @toggle-like="toggleLike"
           @toggle-want="toggleWant"
+          @delete="deletePost"
         />
       </template>
     </main>

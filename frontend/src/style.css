@@ -465,9 +465,35 @@ code {
   text-decoration: none;
 }
 
+.post-card-header-right {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
 .post-card-meta {
   color: var(--text);
   font-size: 14px;
+}
+
+.post-card-author-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.post-card-author-actions button {
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.post-card-author-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .post-card-body {

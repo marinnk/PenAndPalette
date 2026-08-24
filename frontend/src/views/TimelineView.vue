@@ -18,11 +18,14 @@ const {
   newPostCount,
   reactionError,
   isPending,
+  deleteError,
+  isDeleting,
   load,
   loadMore,
   revealNewPosts,
   toggleLike,
   toggleWant,
+  deletePost,
   stopPolling,
 } = useTimeline()
 
@@ -75,6 +78,9 @@ watch(scope, (newScope) => {
       <p v-if="reactionError" class="field-error" data-testid="reaction-error">
         {{ reactionError }}
       </p>
+      <p v-if="deleteError" class="field-error" data-testid="delete-error">
+        {{ deleteError }}
+      </p>
       <NewPostBanner :count="newPostCount" @reveal="handleReveal" />
       <TimelineTabs v-model="scope" />
 
@@ -90,9 +96,10 @@ watch(scope, (newScope) => {
           v-for="post in posts"
           :key="post.id"
           :post="post"
-          :pending="isPending(post.id)"
+          :pending="isPending(post.id) || isDeleting(post.id)"
           @toggle-like="toggleLike"
           @toggle-want="toggleWant"
+          @delete="deletePost"
         />
       </template>
 

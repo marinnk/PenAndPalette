@@ -12,6 +12,7 @@ const samplePost: Post = {
   author: { id: 1, username: 'author', display_name: '投稿者', avatar_url: null },
   body: '本文',
   images: [],
+  image_ids: [],
   like_count: 0,
   want_count: 0,
   comment_count: 0,

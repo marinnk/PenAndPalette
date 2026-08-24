@@ -8,8 +8,25 @@ import { usePostDetail } from '@/composables/usePostDetail'
 // S05 投稿詳細画面（今回はコメント一覧・投稿UIを含まないスタブ）
 const props = defineProps<{ id: string }>()
 const router = useRouter()
-const { post, loading, error, reactionError, reactionPending, load, toggleLike, toggleWant } =
-  usePostDetail()
+const {
+  post,
+  loading,
+  error,
+  reactionError,
+  reactionPending,
+  deleteError,
+  deleting,
+  load,
+  toggleLike,
+  toggleWant,
+  deletePost,
+} = usePostDetail()
+
+async function handleDelete() {
+  if (await deletePost()) {
+    router.push({ name: 'timeline' })
+  }
+}
 
 onMounted(() => load(Number(props.id)))
 // 同じルート（/posts/:id）内で別の投稿idへ遷移した場合、Vue Routerはコンポーネント
@@ -41,13 +58,17 @@ watch(
         <p v-if="reactionError" class="field-error" data-testid="reaction-error">
           {{ reactionError }}
         </p>
+        <p v-if="deleteError" class="field-error" data-testid="delete-error">
+          {{ deleteError }}
+        </p>
         <!-- clickable=false: 詳細画面自身への遷移（同じ投稿への無駄な再ナビゲーション）を避ける -->
         <PostCard
           :post="post"
           :clickable="false"
-          :pending="reactionPending"
+          :pending="reactionPending || deleting"
           @toggle-like="toggleLike"
           @toggle-want="toggleWant"
+          @delete="handleDelete"
         />
       </template>
     </main>
