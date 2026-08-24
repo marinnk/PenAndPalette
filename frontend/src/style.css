@@ -632,7 +632,11 @@ code {
   cursor: pointer;
 }
 
-.post-compose-image-add {
+/* .form-field label（詳細度0,1,1・display:block/color:var(--text-h)）がこのlabelにも
+   かかってしまい、単純な.post-compose-image-add単体（詳細度0,1,0）では上書きできず、
+   丸ボタンが崩れて文字色も黒いままになっていた。.form-fieldとの組み合わせで詳細度0,2,0にし、
+   確実に上書きする */
+.form-field .post-compose-image-add {
   display: flex;
   align-items: center;
   justify-content: center;
