@@ -199,98 +199,13 @@ describe('ProfileView', () => {
     })
   })
 
-  it('他人のプロフィールでは「届いたリクエスト」ボタンが表示されない', async () => {
+  it('プロフィール画面には「届いたリクエスト」のUIを持たない（ヘッダーの通知バッジから確認する）', async () => {
     mockApiClient()
-    renderProfileView(999)
+    renderProfileView(1)
 
     await waitFor(() => {
       expect(screen.getByTestId('profile-display-name')).toBeInTheDocument()
     })
-    expect(screen.queryByTestId('received-requests-toggle')).not.toBeInTheDocument()
-    // AppHeaderの通知バッジ用の呼び出し（1回）はある一方、ProfileView自身の
-    // 「届いたリクエスト」セクション用の呼び出しは他人のプロフィールでは発生しないはず
-    const receivedCalls = vi
-      .mocked(apiClient.get)
-      .mock.calls.filter(([url]) => url === '/api/requests/received')
-    expect(receivedCalls).toHaveLength(1)
-  })
-
-  it('自分のプロフィールでは「届いたリクエスト」ボタンのみ表示され、一覧はデフォルトでは表示されない', async () => {
-    mockApiClient({
-      receivedRequests: [
-        {
-          id: 1,
-          from_user: { id: 6, username: 'roku', display_name: 'ユーザーF', avatar_url: null },
-          related_post: null,
-          message: 'この場面の続きを書いてほしいです',
-          created_at: '2026-08-24T00:00:00Z',
-        },
-      ],
-    })
-    renderProfileView(1)
-
-    await waitFor(() => {
-      expect(screen.getByTestId('received-requests-toggle')).toBeInTheDocument()
-    })
-    expect(screen.queryByTestId('received-request-1')).not.toBeInTheDocument()
-    // AppHeaderの通知バッジ用の呼び出し以外に、ProfileView自身からの取得は
-    // まだ発生していないはず（ボタンを押すまで遅延取得する）
-    const receivedCalls = vi
-      .mocked(apiClient.get)
-      .mock.calls.filter(([url]) => url === '/api/requests/received')
-    expect(receivedCalls).toHaveLength(1)
-  })
-
-  it('「届いたリクエスト」ボタンを押すと一覧を取得して表示する', async () => {
-    mockApiClient({
-      receivedRequests: [
-        {
-          id: 1,
-          from_user: { id: 6, username: 'roku', display_name: 'ユーザーF', avatar_url: null },
-          related_post: null,
-          message: 'この場面の続きを書いてほしいです',
-          created_at: '2026-08-24T00:00:00Z',
-        },
-      ],
-    })
-    renderProfileView(1)
-    await waitFor(() => expect(screen.getByTestId('received-requests-toggle')).toBeInTheDocument())
-
-    await fireEvent.click(screen.getByTestId('received-requests-toggle'))
-
-    await waitFor(() => {
-      expect(screen.getByTestId('received-request-1')).toHaveTextContent(
-        'ユーザーF さんから：「この場面の続きを書いてほしいです」',
-      )
-    })
-  })
-
-  it('「届いたリクエスト」ボタンをもう一度押すと一覧が隠れる（再取得はしない）', async () => {
-    mockApiClient()
-    renderProfileView(1)
-    await waitFor(() => expect(screen.getByTestId('received-requests-toggle')).toBeInTheDocument())
-    await fireEvent.click(screen.getByTestId('received-requests-toggle'))
-    await waitFor(() => expect(screen.getByTestId('received-requests-empty')).toBeInTheDocument())
-
-    await fireEvent.click(screen.getByTestId('received-requests-toggle'))
-
-    expect(screen.queryByTestId('received-requests-empty')).not.toBeInTheDocument()
-    const receivedCalls = vi
-      .mocked(apiClient.get)
-      .mock.calls.filter(([url]) => url === '/api/requests/received')
-    // AppHeaderからの1回 + ボタンを開いたときの1回のみ（閉じて再度開いても増えない）
-    expect(receivedCalls).toHaveLength(2)
-  })
-
-  it('自分のプロフィールで届いたリクエストが無い場合は空状態を表示する', async () => {
-    mockApiClient()
-    renderProfileView(1)
-    await waitFor(() => expect(screen.getByTestId('received-requests-toggle')).toBeInTheDocument())
-
-    await fireEvent.click(screen.getByTestId('received-requests-toggle'))
-
-    await waitFor(() => {
-      expect(screen.getByTestId('received-requests-empty')).toBeInTheDocument()
-    })
+    expect(screen.queryByText('届いたリクエスト')).not.toBeInTheDocument()
   })
 })

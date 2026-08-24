@@ -94,4 +94,31 @@ describe('AppHeader', () => {
       expect(screen.getByTestId('header-request-badge')).toHaveTextContent('届いたリクエスト 1')
     })
   })
+
+  it('通知バッジをクリックすると届いたリクエストの一覧がドロップダウンで表示される', async () => {
+    vi.mocked(apiClient.get).mockResolvedValue({
+      data: [
+        {
+          id: 1,
+          from_user: { id: 2, username: 'jiro', display_name: '次郎', avatar_url: null },
+          related_post: null,
+          message: 'この場面の続きを書いてほしいです',
+          created_at: '2026-08-24T00:00:00Z',
+        },
+      ],
+    })
+    renderAppHeader()
+    await waitFor(() => expect(screen.getByTestId('header-request-badge')).toBeInTheDocument())
+    expect(screen.queryByTestId('header-request-dropdown')).not.toBeInTheDocument()
+
+    await fireEvent.click(screen.getByTestId('header-request-badge'))
+
+    expect(screen.getByTestId('header-received-request-1')).toHaveTextContent(
+      '次郎 さんから：「この場面の続きを書いてほしいです」',
+    )
+
+    await fireEvent.click(screen.getByTestId('header-request-badge'))
+
+    expect(screen.queryByTestId('header-request-dropdown')).not.toBeInTheDocument()
+  })
 })

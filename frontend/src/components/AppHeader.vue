@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useReceivedRequests } from '@/composables/useReceivedRequests'
@@ -9,13 +9,18 @@ import { useReceivedRequests } from '@/composables/useReceivedRequests'
 const router = useRouter()
 const auth = useAuthStore()
 const { receivedRequests, load: loadReceivedRequests } = useReceivedRequests()
+const showRequestsDropdown = ref(false)
 
-// AppHeaderは各画面のテンプレート内に直接置かれており、画面遷移のたびに
-// マウントし直される（ProfileView.vueの届いたリクエスト一覧とは別に、
-// ヘッダーの通知バッジ用に独立して取得する）
+// AppHeaderは各画面のテンプレート内に直接置かれており、画面遷移のたびにマウントし直される。
+// 通知バッジの件数・ドロップダウンの中身の両方に使うため、マウント時に1回取得しておく
+// （ドロップダウンを開く時点では再取得しない）
 onMounted(() => {
   if (auth.currentUser) loadReceivedRequests()
 })
+
+function toggleRequestsDropdown() {
+  showRequestsDropdown.value = !showRequestsDropdown.value
+}
 
 async function handleLogout() {
   await auth.logout()
@@ -34,14 +39,33 @@ async function handleLogout() {
       >
         {{ auth.currentUser.display_name }}
       </RouterLink>
-      <RouterLink
-        v-if="auth.currentUser && receivedRequests.length > 0"
-        :to="{ name: 'profile', params: { id: auth.currentUser.id } }"
-        class="app-header-request-badge"
-        data-testid="header-request-badge"
-      >
-        🔔 届いたリクエスト {{ receivedRequests.length }}
-      </RouterLink>
+
+      <div v-if="auth.currentUser && receivedRequests.length > 0" class="app-header-requests">
+        <button
+          type="button"
+          class="app-header-request-badge"
+          data-testid="header-request-badge"
+          :aria-expanded="showRequestsDropdown"
+          @click="toggleRequestsDropdown"
+        >
+          🔔 届いたリクエスト {{ receivedRequests.length }}
+        </button>
+        <div
+          v-if="showRequestsDropdown"
+          class="app-header-request-dropdown"
+          data-testid="header-request-dropdown"
+        >
+          <div
+            v-for="req in receivedRequests"
+            :key="req.id"
+            class="received-request-item"
+            :data-testid="`header-received-request-${req.id}`"
+          >
+            {{ req.from_user.display_name }} さんから：「{{ req.message }}」
+          </div>
+        </div>
+      </div>
+
       <button data-testid="header-logout-button" @click="handleLogout">ログアウト</button>
     </nav>
   </header>

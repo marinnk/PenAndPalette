@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import AppHeader from '@/components/AppHeader.vue'
 import PostCard from '@/components/PostCard.vue'
 import { useProfile } from '@/composables/useProfile'
-import { useReceivedRequests } from '@/composables/useReceivedRequests'
 import { useAuthStore } from '@/stores/auth'
 
-// S07 プロフィール画面
+// S07 プロフィール画面。届いたリクエストの確認はヘッダーの通知バッジ
+// （components/AppHeader.vue）から行うため、この画面自体には持たない
 const props = defineProps<{ id: string }>()
 const router = useRouter()
 const auth = useAuthStore()
@@ -28,27 +28,8 @@ const {
   deletePost,
   toggleFollow,
 } = useProfile()
-const {
-  receivedRequests,
-  loading: receivedLoading,
-  error: receivedError,
-  load: loadReceived,
-} = useReceivedRequests()
 
 const isOwnProfile = computed(() => auth.currentUser?.id === Number(props.id))
-
-// 届いたリクエストはデフォルトでは表示せず、[届いたリクエスト]ボタンを押したときだけ
-// 表示・取得する（常時表示だと自分の投稿一覧より上のスペースを占有してしまうため）
-const showReceivedRequests = ref(false)
-let receivedRequestsLoadStarted = false
-
-function toggleReceivedRequests() {
-  showReceivedRequests.value = !showReceivedRequests.value
-  if (showReceivedRequests.value && !receivedRequestsLoadStarted) {
-    receivedRequestsLoadStarted = true
-    loadReceived()
-  }
-}
 
 onMounted(() => load(Number(props.id)))
 watch(
@@ -126,41 +107,6 @@ watch(
         <p v-if="deleteError" class="field-error" data-testid="delete-error">
           {{ deleteError }}
         </p>
-
-        <div v-if="isOwnProfile" class="received-requests">
-          <button
-            type="button"
-            class="received-requests-toggle"
-            data-testid="received-requests-toggle"
-            :aria-expanded="showReceivedRequests"
-            @click="toggleReceivedRequests"
-          >
-            届いたリクエスト
-          </button>
-          <section v-if="showReceivedRequests">
-            <p v-if="receivedLoading" data-testid="received-requests-loading">読み込み中...</p>
-            <p v-else-if="receivedError" class="field-error" data-testid="received-requests-error">
-              リクエスト一覧の取得に失敗しました。
-            </p>
-            <template v-else>
-              <p
-                v-if="receivedRequests.length === 0"
-                class="empty-state"
-                data-testid="received-requests-empty"
-              >
-                届いたリクエストはまだありません。
-              </p>
-              <div
-                v-for="req in receivedRequests"
-                :key="req.id"
-                class="received-request-item"
-                :data-testid="`received-request-${req.id}`"
-              >
-                {{ req.from_user.display_name }} さんから：「{{ req.message }}」
-              </div>
-            </template>
-          </section>
-        </div>
 
         <h2>{{ profile.display_name }}の投稿</h2>
         <p v-if="posts.length === 0" class="empty-state" data-testid="profile-posts-empty">
