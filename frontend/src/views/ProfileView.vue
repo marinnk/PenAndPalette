@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import AppHeader from '@/components/AppHeader.vue'
 import PostCard from '@/components/PostCard.vue'
@@ -37,18 +37,23 @@ const {
 
 const isOwnProfile = computed(() => auth.currentUser?.id === Number(props.id))
 
+// 届いたリクエストはデフォルトでは表示せず、[届いたリクエスト]ボタンを押したときだけ
+// 表示・取得する（常時表示だと自分の投稿一覧より上のスペースを占有してしまうため）
+const showReceivedRequests = ref(false)
+let receivedRequestsLoadStarted = false
+
+function toggleReceivedRequests() {
+  showReceivedRequests.value = !showReceivedRequests.value
+  if (showReceivedRequests.value && !receivedRequestsLoadStarted) {
+    receivedRequestsLoadStarted = true
+    loadReceived()
+  }
+}
+
 onMounted(() => load(Number(props.id)))
 watch(
   () => props.id,
   (id) => load(Number(id)),
-)
-// 届いたリクエストは自分のプロフィールを見ているときだけ取得する（他人のプロフィールでは不要）
-watch(
-  isOwnProfile,
-  (own) => {
-    if (own) loadReceived()
-  },
-  { immediate: true },
 )
 </script>
 
@@ -122,30 +127,40 @@ watch(
           {{ deleteError }}
         </p>
 
-        <section v-if="isOwnProfile" class="received-requests">
-          <h2>届いたリクエスト</h2>
-          <p v-if="receivedLoading" data-testid="received-requests-loading">読み込み中...</p>
-          <p v-else-if="receivedError" class="field-error" data-testid="received-requests-error">
-            リクエスト一覧の取得に失敗しました。
-          </p>
-          <template v-else>
-            <p
-              v-if="receivedRequests.length === 0"
-              class="empty-state"
-              data-testid="received-requests-empty"
-            >
-              届いたリクエストはまだありません。
+        <div v-if="isOwnProfile" class="received-requests">
+          <button
+            type="button"
+            class="received-requests-toggle"
+            data-testid="received-requests-toggle"
+            :aria-expanded="showReceivedRequests"
+            @click="toggleReceivedRequests"
+          >
+            届いたリクエスト
+          </button>
+          <section v-if="showReceivedRequests">
+            <p v-if="receivedLoading" data-testid="received-requests-loading">読み込み中...</p>
+            <p v-else-if="receivedError" class="field-error" data-testid="received-requests-error">
+              リクエスト一覧の取得に失敗しました。
             </p>
-            <div
-              v-for="req in receivedRequests"
-              :key="req.id"
-              class="received-request-item"
-              :data-testid="`received-request-${req.id}`"
-            >
-              {{ req.from_user.display_name }} さんから：「{{ req.message }}」
-            </div>
-          </template>
-        </section>
+            <template v-else>
+              <p
+                v-if="receivedRequests.length === 0"
+                class="empty-state"
+                data-testid="received-requests-empty"
+              >
+                届いたリクエストはまだありません。
+              </p>
+              <div
+                v-for="req in receivedRequests"
+                :key="req.id"
+                class="received-request-item"
+                :data-testid="`received-request-${req.id}`"
+              >
+                {{ req.from_user.display_name }} さんから：「{{ req.message }}」
+              </div>
+            </template>
+          </section>
+        </div>
 
         <h2>{{ profile.display_name }}の投稿</h2>
         <p v-if="posts.length === 0" class="empty-state" data-testid="profile-posts-empty">

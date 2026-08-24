@@ -792,6 +792,22 @@ code {
   margin-bottom: 24px;
 }
 
+.received-requests-toggle {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-h);
+  border-radius: 6px;
+  padding: 8px 16px;
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.received-requests-toggle[aria-expanded='true'] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .received-request-item {
   padding: 12px 0;
   border-bottom: 1px solid var(--border);
