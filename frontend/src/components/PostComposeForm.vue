@@ -80,7 +80,16 @@ function onFileSelected(event: Event) {
             data-testid="post-image-add"
             aria-label="画像を追加"
           >
-            ＋
+            <!-- テキストの「＋」は書体によって縦位置が揺れ丸の中心からずれるため、
+            アイコンをSVGの直線2本で描いて確実に中央揃えにする -->
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+              <path
+                d="M12 5v14M5 12h14"
+                stroke="currentColor"
+                stroke-width="2.5"
+                stroke-linecap="round"
+              />
+            </svg>
             <input
               type="file"
               accept="image/jpeg,image/png"

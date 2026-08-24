@@ -639,18 +639,19 @@ code {
   align-self: center;
   width: 44px;
   height: 44px;
-  border: 1px solid var(--accent-border);
+  border: none;
   border-radius: 50%;
-  color: var(--accent);
-  font-size: 22px;
-  line-height: 1;
+  background: var(--accent);
+  color: #fff;
   cursor: pointer;
-  background: var(--bg);
+}
+
+.post-compose-image-add svg {
+  display: block;
 }
 
 .post-compose-image-add:hover {
-  background: var(--accent);
-  color: #fff;
+  opacity: 0.85;
 }
 
 .visually-hidden {
