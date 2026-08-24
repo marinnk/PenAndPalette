@@ -156,7 +156,10 @@ code {
   width: 1126px;
   max-width: 100%;
   margin: 0 auto;
-  text-align: center;
+  /* Viteテンプレートの名残でtext-align: centerだったため、投稿一覧等の本文まで
+     中央寄せに巻き込まれていた。アプリの既定は左寄せにし、中央寄せにしたい要素
+     （.form-card h1等）は個別にtext-align: centerを指定する */
+  text-align: left;
   border-inline: 1px solid var(--border);
   min-height: 100svh;
   display: flex;
@@ -383,6 +386,22 @@ code {
   padding: 6px 12px;
   font: inherit;
   cursor: pointer;
+}
+
+/* F-6 リクエスト機能: ヘッダーの通知バッジ（届いたリクエストがある場合のみ表示）。
+   .app-header-nav a { color: var(--text-h) }（詳細度0,1,1）より優先させるため、
+   .app-header-navとの組み合わせで詳細度0,2,0にする */
+.app-header-nav .app-header-request-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--accent-bg);
+  color: var(--accent);
+  border: 1px solid var(--accent-border);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 14px;
+  white-space: nowrap;
 }
 
 /* S03 タイムライン画面（画面設計書114〜145行目） */
@@ -686,6 +705,46 @@ code {
   font: inherit;
   cursor: pointer;
   padding: 0;
+}
+
+/* S06 リクエスト作成画面: 参考にしてほしい投稿のpicker */
+.request-related-post-picker {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px;
+  margin-top: 8px;
+}
+
+.request-related-post-option {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 0;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-h);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.request-related-post-option-body {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.request-related-post-option-date {
+  flex-shrink: 0;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.request-related-post-selected {
+  margin-top: 8px;
 }
 
 /* S07 プロフィール画面 */

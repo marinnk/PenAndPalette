@@ -44,6 +44,7 @@ async function handleSubmit() {
   </p>
   <RequestComposeForm
     v-else
+    :to-user-id="toUserId"
     :to-display-name="toDisplayName"
     :message="message"
     :related-post-id="relatedPostId"

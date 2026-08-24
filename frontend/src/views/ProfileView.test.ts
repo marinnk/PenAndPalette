@@ -207,7 +207,12 @@ describe('ProfileView', () => {
       expect(screen.getByTestId('profile-display-name')).toBeInTheDocument()
     })
     expect(screen.queryByText('届いたリクエスト')).not.toBeInTheDocument()
-    expect(apiClient.get).not.toHaveBeenCalledWith('/api/requests/received')
+    // AppHeaderの通知バッジ用の呼び出し（1回）はある一方、ProfileView自身の
+    // 「届いたリクエスト」セクション用の呼び出しは他人のプロフィールでは発生しないはず
+    const receivedCalls = vi
+      .mocked(apiClient.get)
+      .mock.calls.filter(([url]) => url === '/api/requests/received')
+    expect(receivedCalls).toHaveLength(1)
   })
 
   it('自分のプロフィールでは届いたリクエストの一覧を表示する', async () => {

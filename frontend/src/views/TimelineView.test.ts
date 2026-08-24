@@ -5,7 +5,7 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import { apiClient } from '@/lib/apiClient'
 import { useAuthStore } from '@/stores/auth'
 import TimelineView from './TimelineView.vue'
-import type { Post } from '@/types/post'
+import type { Post, PostListResponse } from '@/types/post'
 
 vi.mock('@/lib/apiClient', () => ({
   apiClient: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() },
@@ -41,6 +41,23 @@ function makePost(id: number, overrides: Partial<Post> = {}): Post {
   }
 }
 
+// AppHeader（TimelineViewが子コンポーネントとして描画する）がマウント時にGET
+// /api/requests/receivedを呼ぶため、単純な呼び出し順ベースのmockResolvedValueOnceだと
+// タイムライン本体のGET /api/postsの応答と混線してしまう。URLで振り分ける
+// mockImplementationにし、/api/postsへの複数回の呼び出しには順にqueueの値を返す
+function mockGet(postsQueue: PostListResponse[]) {
+  let call = 0
+  vi.mocked(apiClient.get).mockImplementation((url: string) => {
+    if (url === '/api/requests/received') return Promise.resolve({ data: [] })
+    if (url === '/api/posts') {
+      const data = postsQueue[Math.min(call, postsQueue.length - 1)]
+      call += 1
+      return Promise.resolve({ data })
+    }
+    return Promise.reject(new Error(`unmocked GET ${url}`))
+  })
+}
+
 function renderTimelineView() {
   const pinia = createPinia()
   setActivePinia(pinia)
@@ -73,9 +90,7 @@ afterEach(() => {
 
 describe('TimelineView', () => {
   it('マウント時にGET /api/posts?scope=allで一覧取得する', async () => {
-    vi.mocked(apiClient.get).mockResolvedValueOnce({
-      data: { results: [makePost(1)], has_more: false },
-    })
+    mockGet([{ results: [makePost(1)], has_more: false }])
     const { router } = renderTimelineView()
     await router.isReady()
 
@@ -88,7 +103,7 @@ describe('TimelineView', () => {
   })
 
   it('投稿が無い場合は空状態メッセージを表示する', async () => {
-    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: { results: [], has_more: false } })
+    mockGet([{ results: [], has_more: false }])
     const { router } = renderTimelineView()
     await router.isReady()
 
@@ -98,14 +113,14 @@ describe('TimelineView', () => {
   })
 
   it('フォロー中タブに切り替えるとscope=followingで再取得する', async () => {
-    vi.mocked(apiClient.get).mockResolvedValueOnce({
-      data: { results: [makePost(1)], has_more: false },
-    })
+    mockGet([
+      { results: [makePost(1)], has_more: false },
+      { results: [], has_more: false },
+    ])
     const { router } = renderTimelineView()
     await router.isReady()
     await waitFor(() => expect(screen.getByText('投稿1')).toBeInTheDocument())
 
-    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: { results: [], has_more: false } })
     await fireEvent.click(screen.getByTestId('tab-following'))
 
     await waitFor(() => {
@@ -123,16 +138,14 @@ describe('TimelineView', () => {
     const scrollToSpy = vi.fn()
     vi.stubGlobal('scrollTo', scrollToSpy)
 
-    vi.mocked(apiClient.get).mockResolvedValueOnce({
-      data: { results: [makePost(1)], has_more: false },
-    })
+    mockGet([
+      { results: [makePost(1)], has_more: false },
+      { results: [makePost(2)], has_more: false },
+    ])
     const { router } = renderTimelineView()
     await router.isReady()
     await waitFor(() => expect(screen.getByText('投稿1')).toBeInTheDocument())
 
-    vi.mocked(apiClient.get).mockResolvedValueOnce({
-      data: { results: [makePost(2)], has_more: false },
-    })
     await vi.advanceTimersByTimeAsync(30_000)
     await waitFor(() => expect(screen.getByTestId('new-post-banner')).toBeInTheDocument())
 
@@ -148,9 +161,7 @@ describe('TimelineView', () => {
   })
 
   it('自分の投稿の削除ボタン→確認後に一覧からその場で取り除かれる', async () => {
-    vi.mocked(apiClient.get).mockResolvedValueOnce({
-      data: { results: [makePost(1), makePost(2)], has_more: false },
-    })
+    mockGet([{ results: [makePost(1), makePost(2)], has_more: false }])
     const { router } = renderTimelineView()
     await router.isReady()
     await waitFor(() => expect(screen.getByText('投稿1')).toBeInTheDocument())
@@ -166,9 +177,7 @@ describe('TimelineView', () => {
   })
 
   it('削除に失敗した場合はエラーメッセージを表示し一覧はそのまま', async () => {
-    vi.mocked(apiClient.get).mockResolvedValueOnce({
-      data: { results: [makePost(1)], has_more: false },
-    })
+    mockGet([{ results: [makePost(1)], has_more: false }])
     const { router } = renderTimelineView()
     await router.isReady()
     await waitFor(() => expect(screen.getByText('投稿1')).toBeInTheDocument())
@@ -183,7 +192,7 @@ describe('TimelineView', () => {
   })
 
   it('「投稿する」ボタンから投稿作成画面へ遷移する', async () => {
-    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: { results: [], has_more: false } })
+    mockGet([{ results: [], has_more: false }])
     const { router } = renderTimelineView()
     await router.isReady()
     await waitFor(() => expect(screen.getByTestId('timeline-empty')).toBeInTheDocument())
