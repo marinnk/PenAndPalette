@@ -465,9 +465,35 @@ code {
   text-decoration: none;
 }
 
+.post-card-header-right {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
 .post-card-meta {
   color: var(--text);
   font-size: 14px;
+}
+
+.post-card-author-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.post-card-author-actions button {
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.post-card-author-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .post-card-body {
@@ -577,8 +603,7 @@ code {
   flex-wrap: wrap;
 }
 
-.post-compose-image-slot,
-.post-compose-image-add {
+.post-compose-image-slot {
   position: relative;
   width: 84px;
   height: 84px;
@@ -607,19 +632,30 @@ code {
   cursor: pointer;
 }
 
-.post-compose-image-add {
+/* .form-field label（詳細度0,1,1・display:block/color:var(--text-h)）がこのlabelにも
+   かかってしまい、単純な.post-compose-image-add単体（詳細度0,1,0）では上書きできず、
+   丸ボタンが崩れて文字色も黒いままになっていた。.form-fieldとの組み合わせで詳細度0,2,0にし、
+   確実に上書きする */
+.form-field .post-compose-image-add {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--text);
-  font-size: 13px;
+  align-self: center;
+  width: 44px;
+  height: 44px;
+  border: none;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
   cursor: pointer;
-  background: var(--bg);
+}
+
+.post-compose-image-add svg {
+  display: block;
 }
 
 .post-compose-image-add:hover {
-  border-color: var(--accent-border);
-  color: var(--accent);
+  opacity: 0.85;
 }
 
 .visually-hidden {

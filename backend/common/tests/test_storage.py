@@ -1,8 +1,9 @@
 import pytest
+from django.core.files.storage import default_storage
 from django.core.files.uploadedfile import SimpleUploadedFile
 from rest_framework.exceptions import ValidationError
 
-from common.storage import upload_image, validate_image_file
+from common.storage import delete_image, upload_image, validate_image_file
 
 
 def make_file(name="a.jpg", content_type="image/jpeg", content=b"bytes"):
@@ -54,3 +55,26 @@ def test_upload_image_called_twice_with_same_file_returns_different_urls():
     url2 = upload_image(make_file(), folder="posts")
 
     assert url1 != url2
+
+
+def _key_from_url(url):
+    # upload_imageが返すURLからキー（"posts/xxx.jpg"部分）を取り出す、delete_imageとは
+    # 独立したテスト側のURL→キー変換（実装をそのまま再利用すると検証にならないため）
+    return "posts/" + url.split("/posts/", 1)[1]
+
+
+def test_delete_image_removes_uploaded_file():
+    url = upload_image(make_file(), folder="posts")
+    key = _key_from_url(url)
+    assert default_storage.exists(key)
+
+    delete_image(url)
+
+    assert not default_storage.exists(key)
+
+
+def test_delete_image_does_not_raise_for_already_deleted_file():
+    url = upload_image(make_file(), folder="posts")
+
+    delete_image(url)
+    delete_image(url)  # 2回目もエラーにならないこと

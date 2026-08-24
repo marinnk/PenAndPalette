@@ -1,18 +1,22 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/vue'
+import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 import PostCard from './PostCard.vue'
 import type { Post } from '@/types/post'
 
 const PostDetailStub = { template: '<div>post-detail</div>' }
 const ProfileStub = { template: '<div>profile</div>' }
 const TimelineStub = { template: '<div>timeline</div>' }
+const PostEditStub = { template: '<div>post-edit</div>' }
 
 const post: Post = {
   id: 42,
   author: { id: 7, username: 'author', display_name: '投稿者', avatar_url: null },
   body: '本文です',
   images: [],
+  image_ids: [],
   like_count: 3,
   want_count: 1,
   comment_count: 2,
@@ -22,16 +26,32 @@ const post: Post = {
   updated_at: '2026-08-20T00:00:00Z',
 }
 
-function renderPostCard(props: Record<string, unknown> = {}) {
+// currentUserIdは既定でpost.authorとは別人（=自分の投稿ではない）。編集・削除ボタンの
+// 表示条件を検証するテストでは、7（=post.author.id）を明示的に渡す
+function renderPostCard(props: Record<string, unknown> = {}, currentUserId = 999) {
+  const pinia = createPinia()
+  setActivePinia(pinia)
+  const auth = useAuthStore()
+  auth.currentUser = {
+    id: currentUserId,
+    username: 'viewer',
+    display_name: '閲覧者',
+    avatar_url: null,
+  }
+
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
       { path: '/', name: 'timeline', component: TimelineStub },
+      { path: '/posts/:id/edit', name: 'post-edit', component: PostEditStub },
       { path: '/posts/:id', name: 'post-detail', component: PostDetailStub },
       { path: '/profile/:id', name: 'profile', component: ProfileStub },
     ],
   })
-  const result = render(PostCard, { props: { post, ...props }, global: { plugins: [router] } })
+  const result = render(PostCard, {
+    props: { post, ...props },
+    global: { plugins: [pinia, router] },
+  })
   return { ...result, router }
 }
 
@@ -120,35 +140,101 @@ describe('PostCard', () => {
   it('imagesがある投稿では画像を並べて表示する', async () => {
     const withImages = {
       ...post,
-      images: ['https://example.com/1.jpg', 'https://example.com/2.jpg', 'https://example.com/3.jpg'],
-    }
-    const router = createRouter({
-      history: createMemoryHistory(),
-      routes: [
-        { path: '/', name: 'timeline', component: TimelineStub },
-        { path: '/posts/:id', name: 'post-detail', component: PostDetailStub },
-        { path: '/profile/:id', name: 'profile', component: ProfileStub },
+      images: [
+        'https://example.com/1.jpg',
+        'https://example.com/2.jpg',
+        'https://example.com/3.jpg',
       ],
-    })
-    render(PostCard, { props: { post: withImages }, global: { plugins: [router] } })
+    }
+    const { router } = renderPostCard({ post: withImages })
     await router.isReady()
 
     expect(screen.getAllByRole('img')).toHaveLength(3)
   })
 
+  it('本文が画像より上に表示される（投稿詳細画面と同じ並び）', async () => {
+    const withImages = { ...post, images: ['https://example.com/1.jpg'] }
+    const { router } = renderPostCard({ post: withImages })
+    await router.isReady()
+
+    const card = screen.getByTestId('post-card-42')
+    const bodyEl = screen.getByText('本文です')
+    const imageEl = screen.getByRole('img')
+    const position = bodyEl.compareDocumentPosition(imageEl)
+    // Node.DOCUMENT_POSITION_FOLLOWING: bodyElより後（下）にimageElがあることを確認
+    expect(position & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(card).toContainElement(bodyEl)
+  })
+
   it('本文が空文字（画像のみ投稿）の場合は本文の段落を表示しない', async () => {
     const imageOnly = { ...post, body: '', images: ['https://example.com/1.jpg'] }
-    const router = createRouter({
-      history: createMemoryHistory(),
-      routes: [
-        { path: '/', name: 'timeline', component: TimelineStub },
-        { path: '/posts/:id', name: 'post-detail', component: PostDetailStub },
-        { path: '/profile/:id', name: 'profile', component: ProfileStub },
-      ],
-    })
-    render(PostCard, { props: { post: imageOnly }, global: { plugins: [router] } })
+    const { router } = renderPostCard({ post: imageOnly })
     await router.isReady()
 
     expect(screen.queryByText('本文です')).not.toBeInTheDocument()
+  })
+
+  describe('編集・削除（自分の投稿のみ表示、画面設計書141行目）', () => {
+    it('他人の投稿には編集・削除ボタンを表示しない', async () => {
+      const { router } = renderPostCard({}, 999)
+      await router.isReady()
+
+      expect(screen.queryByTestId('edit-button-42')).not.toBeInTheDocument()
+      expect(screen.queryByTestId('delete-button-42')).not.toBeInTheDocument()
+    })
+
+    it('自分の投稿には編集・削除ボタンを表示する', async () => {
+      const { router } = renderPostCard({}, 7)
+      await router.isReady()
+
+      expect(screen.getByTestId('edit-button-42')).toBeInTheDocument()
+      expect(screen.getByTestId('delete-button-42')).toBeInTheDocument()
+    })
+
+    it('編集ボタンクリックで投稿編集画面へ遷移する', async () => {
+      const { router } = renderPostCard({}, 7)
+      await router.isReady()
+
+      await fireEvent.click(screen.getByTestId('edit-button-42'))
+
+      await waitFor(() => {
+        expect(router.currentRoute.value.name).toBe('post-edit')
+        expect(router.currentRoute.value.params.id).toBe('42')
+      })
+    })
+
+    it('削除ボタンは確認後にdeleteをemitする', async () => {
+      vi.spyOn(window, 'confirm').mockReturnValue(true)
+      const { router, emitted } = renderPostCard({}, 7)
+      await router.isReady()
+
+      await fireEvent.click(screen.getByTestId('delete-button-42'))
+
+      expect(window.confirm).toHaveBeenCalled()
+      expect(emitted().delete).toEqual([[post]])
+      vi.restoreAllMocks()
+    })
+
+    it('削除確認をキャンセルするとdeleteをemitしない', async () => {
+      vi.spyOn(window, 'confirm').mockReturnValue(false)
+      const { router, emitted } = renderPostCard({}, 7)
+      await router.isReady()
+
+      await fireEvent.click(screen.getByTestId('delete-button-42'))
+
+      expect(emitted().delete).toBeUndefined()
+      vi.restoreAllMocks()
+    })
+
+    it('削除ボタンクリックはカード自体の遷移を発火させない', async () => {
+      vi.spyOn(window, 'confirm').mockReturnValue(true)
+      const { router } = renderPostCard({}, 7)
+      await router.isReady()
+
+      await fireEvent.click(screen.getByTestId('delete-button-42'))
+
+      expect(router.currentRoute.value.name).toBe('timeline')
+      vi.restoreAllMocks()
+    })
   })
 })

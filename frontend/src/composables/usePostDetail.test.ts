@@ -12,6 +12,7 @@ const samplePost: Post = {
   author: { id: 1, username: 'author', display_name: '投稿者', avatar_url: null },
   body: '本文',
   images: [],
+  image_ids: [],
   like_count: 0,
   want_count: 0,
   comment_count: 0,
@@ -47,6 +48,21 @@ describe('usePostDetail', () => {
 
     expect(error.value).toBe(true)
     expect(post.value).toBeNull()
+  })
+
+  it('load: 前回の削除失敗エラーは新しい読み込みでクリアされる（別の投稿への遷移で古いエラーを残さない）', async () => {
+    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: samplePost })
+    const { load, deleteError, deletePost } = usePostDetail()
+    await load(1)
+
+    vi.mocked(apiClient.delete).mockRejectedValueOnce(new Error('network error'))
+    await deletePost()
+    expect(deleteError.value).not.toBeNull()
+
+    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: { ...samplePost, id: 2 } })
+    await load(2)
+
+    expect(deleteError.value).toBeNull()
   })
 
   it('toggleLike: 現在のpostにいいねの結果を反映する', async () => {

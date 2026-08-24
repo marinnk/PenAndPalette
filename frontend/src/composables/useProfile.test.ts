@@ -15,6 +15,7 @@ function makePost(id: number, overrides: Partial<Post> = {}): Post {
     author: { id: 1, username: 'taro', display_name: '太郎', avatar_url: null },
     body: `投稿${id}`,
     images: [],
+    image_ids: [],
     like_count: 0,
     want_count: 0,
     comment_count: 0,
@@ -57,6 +58,23 @@ describe('useProfile', () => {
 
     expect(error.value).toBe(true)
     expect(loadedProfile.value).toBeNull()
+  })
+
+  it('load: 前回の削除失敗エラーは新しい読み込みでクリアされる（別の利用者への遷移で古いエラーを残さない）', async () => {
+    vi.mocked(apiClient.get).mockImplementation((url: string) => {
+      if (url === '/api/users/1') return Promise.resolve({ data: profile })
+      return Promise.resolve({ data: { results: [makePost(1)], has_more: false } })
+    })
+    const { load, posts, deleteError, deletePost } = useProfile()
+    await load(1)
+
+    vi.mocked(apiClient.delete).mockRejectedValueOnce(new Error('network error'))
+    await deletePost(posts.value[0])
+    expect(deleteError.value).not.toBeNull()
+
+    await load(2)
+
+    expect(deleteError.value).toBeNull()
   })
 
   it('toggleWant: 該当投稿のみにかきたいの結果を反映する', async () => {

@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import TimelineView from '@/views/TimelineView.vue'
 import PostCreateView from '@/views/PostCreateView.vue'
+import PostEditView from '@/views/PostEditView.vue'
 import PostDetailView from '@/views/PostDetailView.vue'
 import ProfileView from '@/views/ProfileView.vue'
 import LoginView from '@/views/LoginView.vue'
@@ -24,6 +25,7 @@ export const router = createRouter({
   routes: [
     { path: '/', name: 'timeline', component: TimelineView },
     { path: '/posts/new', name: 'post-create', component: PostCreateView },
+    { path: '/posts/:id/edit', name: 'post-edit', component: PostEditView, props: true },
     { path: '/posts/:id', name: 'post-detail', component: PostDetailView, props: true },
     { path: '/profile/:id', name: 'profile', component: ProfileView, props: true },
     { path: '/login', name: 'login', component: LoginView, meta: { guestOnly: true } },

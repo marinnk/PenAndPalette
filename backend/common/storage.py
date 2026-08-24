@@ -1,5 +1,6 @@
 import uuid
 from pathlib import PurePosixPath
+from urllib.parse import urlparse
 
 from django.core.files.storage import default_storage
 from rest_framework import serializers
@@ -32,3 +33,19 @@ def upload_image(file, *, folder):
     key = str(PurePosixPath(folder) / f"{uuid.uuid4()}{extension}")
     saved_path = default_storage.save(key, file)
     return default_storage.url(saved_path)
+
+
+def delete_image(image_url):
+    """upload_imageで発行した画像をストレージから削除する（投稿の編集・削除で使用）。
+
+    image_urlはPostImage.image_urlに保存された公開URLであり格納キーそのものではないため、
+    ここでキーへ逆算する。upload_imageは常に`{folder}/{uuid}{extension}`という1階層のキーで
+    保存するため、URLの末尾2セグメント（フォルダ名・ファイル名）を取り出せばよい。この方法は
+    バックエンドが本番のS3（`{scheme}://{host}/{bucket}/{key}`）でもテスト用の
+    FileSystemStorage（`{MEDIA_URL}/{key}`、conftest.py参照）でも同じロジックで動く。
+    対象が既に存在しない場合もS3のDeleteObjectは冪等（エラーにならない）ため、
+    存在確認はせずdefault_storage.delete()にそのまま委ねる。
+    """
+    segments = urlparse(image_url).path.strip("/").split("/")
+    key = "/".join(segments[-2:])
+    default_storage.delete(key)

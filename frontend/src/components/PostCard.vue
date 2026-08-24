@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 import type { Post } from '@/types/post'
 
 // S03/S05/S07で共通利用する投稿カード（画面設計書126〜133行目）。
@@ -11,15 +12,34 @@ const props = withDefaults(defineProps<{ post: Post; clickable?: boolean; pendin
   clickable: true,
   pending: false,
 })
-const emit = defineEmits<{ 'toggle-like': [post: Post]; 'toggle-want': [post: Post] }>()
+const emit = defineEmits<{
+  'toggle-like': [post: Post]
+  'toggle-want': [post: Post]
+  delete: [post: Post]
+}>()
 
 const router = useRouter()
+const auth = useAuthStore()
 
 const formattedDate = computed(() => props.post.created_at.slice(0, 10))
+// 自分の投稿にのみ[編集][削除]を表示する（画面設計書141行目「自分の投稿には[編集][削除]」）
+const isOwnPost = computed(() => auth.currentUser?.id === props.post.author.id)
 
 function goToDetail() {
   if (!props.clickable) return
   router.push({ name: 'post-detail', params: { id: props.post.id } })
+}
+
+function goToEdit() {
+  router.push({ name: 'post-edit', params: { id: props.post.id } })
+}
+
+function onDeleteClick() {
+  // モーダル基盤がこのプロジェクトにまだ無く、削除確認はこの1箇所のみのため
+  // window.confirm()で済ませる（アクセシビリティ対応もブラウザ標準に任せられる）
+  if (window.confirm('この投稿を削除しますか？')) {
+    emit('delete', props.post)
+  }
 }
 </script>
 
@@ -42,8 +62,29 @@ function goToDetail() {
       >
         {{ post.author.display_name }}
       </RouterLink>
-      <span class="post-card-meta">{{ formattedDate }}</span>
+      <span class="post-card-header-right">
+        <span class="post-card-meta">{{ formattedDate }}</span>
+        <span v-if="isOwnPost" class="post-card-author-actions">
+          <button
+            type="button"
+            :disabled="pending"
+            :data-testid="`edit-button-${post.id}`"
+            @click.stop="goToEdit"
+          >
+            編集
+          </button>
+          <button
+            type="button"
+            :disabled="pending"
+            :data-testid="`delete-button-${post.id}`"
+            @click.stop="onDeleteClick"
+          >
+            削除
+          </button>
+        </span>
+      </span>
     </div>
+    <p v-if="post.body" class="post-card-body">{{ post.body }}</p>
     <div
       v-if="post.images.length > 0"
       class="post-card-images"
@@ -51,7 +92,6 @@ function goToDetail() {
     >
       <img v-for="(url, i) in post.images" :key="url" :src="url" :alt="`投稿画像${i + 1}`" />
     </div>
-    <p v-if="post.body" class="post-card-body">{{ post.body }}</p>
     <div class="post-card-actions">
       <button
         type="button"

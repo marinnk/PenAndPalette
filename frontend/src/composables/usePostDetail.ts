@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 import { apiClient } from '@/lib/apiClient'
 import { setLiked, setWanted } from '@/composables/usePostReactions'
+import { deletePostById } from '@/composables/usePostDelete'
 import type { Post } from '@/types/post'
 
 // S05 投稿詳細画面（今回はコメント一覧・投稿UIを含まないスタブ）
@@ -10,10 +11,13 @@ export function usePostDetail() {
   const error = ref(false)
   const reactionError = ref<string | null>(null)
   const reactionPending = ref(false)
+  const deleteError = ref<string | null>(null)
+  const deleting = ref(false)
 
   async function load(postId: number) {
     loading.value = true
     error.value = false
+    deleteError.value = null
     try {
       const { data } = await apiClient.get<Post>(`/api/posts/${postId}`)
       post.value = data
@@ -56,5 +60,30 @@ export function usePostDetail() {
     }
   }
 
-  return { post, loading, error, reactionError, reactionPending, load, toggleLike, toggleWant }
+  async function deletePost(): Promise<boolean> {
+    if (!post.value || deleting.value) return false
+    deleting.value = true
+    deleteError.value = null
+    try {
+      const ok = await deletePostById(post.value.id)
+      if (!ok) deleteError.value = '削除に失敗しました。もう一度お試しください。'
+      return ok
+    } finally {
+      deleting.value = false
+    }
+  }
+
+  return {
+    post,
+    loading,
+    error,
+    reactionError,
+    reactionPending,
+    deleteError,
+    deleting,
+    load,
+    toggleLike,
+    toggleWant,
+    deletePost,
+  }
 }

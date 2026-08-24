@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 import { apiClient } from '@/lib/apiClient'
 import { useReactablePosts } from '@/composables/usePostReactions'
+import { useDeletablePosts } from '@/composables/usePostDelete'
 import type { Post, PostListResponse, TimelineScope } from '@/types/post'
 
 const POLL_INTERVAL_MS = 30_000
@@ -20,12 +21,18 @@ export function useTimeline() {
   const newPostCount = ref(0)
 
   const { reactionError, isPending, toggleLike, toggleWant } = useReactablePosts(posts)
+  const { deleteError, isDeleting, deletePost } = useDeletablePosts(posts)
 
   let pendingNewPosts: Post[] = []
   // ポーリングの基準id。0は「まだ投稿が無い」を表し、after_id=0は全件取得と等価になるため
   // 空のタイムラインでも特別分岐なしで動く（バックエンド側もafter_id=0を受け付ける）
   let pollAnchorId = 0
   let pollTimer: ReturnType<typeof setInterval> | null = null
+  // 追加読み込み（before_id）の基準id。posts.value由来ではなくload/loadMoreの取得結果から
+  // 更新する専用の変数として持つ。posts.valueから都度計算すると、削除機能により
+  // 表示中の投稿が0件になった場合に「まだ何も読み込んでいない」と区別できず、
+  // サーバーにはまだ投稿が残っている（hasMore=true）のに追加読み込みができなくなるため
+  let oldestLoadedId: number | null = null
 
   async function fetchPosts(params: Record<string, string | number>) {
     const { data } = await apiClient.get<PostListResponse>('/api/posts', { params })
@@ -62,6 +69,7 @@ export function useTimeline() {
     scope.value = newScope
     loading.value = true
     error.value = false
+    deleteError.value = null
     // タブ切替は一覧をやり直すため、保留中の新着通知は持ち越さない
     pendingNewPosts = []
     newPostCount.value = 0
@@ -70,6 +78,7 @@ export function useTimeline() {
       posts.value = data.results
       hasMore.value = data.has_more
       pollAnchorId = data.results[0]?.id ?? 0
+      oldestLoadedId = data.results[data.results.length - 1]?.id ?? null
       startPolling()
     } catch {
       error.value = true
@@ -79,18 +88,24 @@ export function useTimeline() {
   }
 
   async function loadMore() {
-    if (!hasMore.value || loadingMore.value || posts.value.length === 0) return
+    if (!hasMore.value || loadingMore.value || oldestLoadedId === null) return
     loadingMore.value = true
     // 取得中にタブ（scope）が切り替わっていないかを判定するため、リクエスト時点のscopeを保持する
     const requestScope = scope.value
     try {
-      const lastId = posts.value[posts.value.length - 1].id
-      const data = await fetchPosts({ scope: requestScope, before_id: lastId, limit: PAGE_SIZE })
+      const data = await fetchPosts({
+        scope: requestScope,
+        before_id: oldestLoadedId,
+        limit: PAGE_SIZE,
+      })
       // 応答が返ってくるまでの間にタブが切り替わっていたら、古いscopeの結果は捨てる
       // （捨てないと、切替後の一覧に古いタブの投稿が紛れ込む）
       if (requestScope !== scope.value) return
       posts.value = [...posts.value, ...data.results]
       hasMore.value = data.has_more
+      if (data.results.length > 0) {
+        oldestLoadedId = data.results[data.results.length - 1].id
+      }
     } finally {
       loadingMore.value = false
     }
@@ -112,11 +127,14 @@ export function useTimeline() {
     newPostCount,
     reactionError,
     isPending,
+    deleteError,
+    isDeleting,
     load,
     loadMore,
     revealNewPosts,
     toggleLike,
     toggleWant,
+    deletePost,
     stopPolling,
   }
 }

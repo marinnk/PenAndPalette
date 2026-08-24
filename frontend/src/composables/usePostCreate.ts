@@ -1,17 +1,8 @@
 import { onUnmounted, ref } from 'vue'
 import { apiClient } from '@/lib/apiClient'
 import { extractDetail, extractFieldErrors, extractNonFieldError } from '@/lib/apiError'
+import { validateNewImage } from '@/composables/postImageValidation'
 import type { Post } from '@/types/post'
-
-// 以下3つの定数は、バックエンドの検証ルールをクライアント側にも複製したもの（言語が異なるため
-// 実行時に1つの定義を共有することはできない）。値を変更する場合は対応するバックエンド側も
-// 必ず合わせて変更すること：
-//   MAX_IMAGES          → backend/posts/serializers.py の PostCreateSerializer.MAX_IMAGES
-//   MAX_IMAGE_SIZE_BYTES → backend/common/storage.py の MAX_IMAGE_SIZE_BYTES
-//   ALLOWED_IMAGE_TYPES  → backend/common/storage.py の ALLOWED_CONTENT_TYPES
-const MAX_IMAGES = 4
-const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024
-const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png']
 
 // S04 投稿作成画面。stores/auth.tsのregister()と同じエラーハンドリングの形に揃える
 export function usePostCreate() {
@@ -26,15 +17,9 @@ export function usePostCreate() {
     imagePreviews.value.forEach((url) => URL.revokeObjectURL(url))
   }
 
-  // バックエンドのvalidate_image_file（common/storage.py）と同じルールをクライアント側でも
-  // チェックし、送信前にその場でエラーを返せるようにする。サーバー側のfieldErrors.imagesは
-  // このチェックをすり抜けたものに対する最終防衛線として残る
   function addImage(file: File): string | null {
-    if (images.value.length >= MAX_IMAGES) return '画像は4枚まで添付できます。'
-    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
-      return '画像はjpgまたはpng形式のみ添付できます。'
-    }
-    if (file.size > MAX_IMAGE_SIZE_BYTES) return '画像は1枚あたり5MBまでです。'
+    const error = validateNewImage(file, images.value.length)
+    if (error) return error
 
     images.value.push(file)
     imagePreviews.value.push(URL.createObjectURL(file))
@@ -65,7 +50,8 @@ export function usePostCreate() {
       if (Object.keys(fieldErrors.value).length === 0) {
         // 「本文または画像のいずれかを入力してください」のような、特定の入力欄に紐付かない
         // バリデーションエラー（non_field_errors）を優先して表示する
-        errorMessage.value = extractNonFieldError(err) ?? extractDetail(err) ?? '投稿に失敗しました。'
+        errorMessage.value =
+          extractNonFieldError(err) ?? extractDetail(err) ?? '投稿に失敗しました。'
       }
       return null
     } finally {
