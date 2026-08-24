@@ -10,11 +10,15 @@ class PostQuerySet(models.QuerySet):
         同一クエリでlikes・wantsの2つの逆参照をCountすると、JOINが直積になり件数が
         水増しされるため、distinct=Trueが必須（基本設計書6.3章のN+1回避方針と対になる注意点）。
         """
-        return self.select_related("user").annotate(
-            like_count=Count("likes", distinct=True),
-            want_count=Count("wants", distinct=True),
-            liked_by_me=Exists(Like.objects.filter(post=OuterRef("pk"), user=viewer)),
-            wanted_by_me=Exists(Want.objects.filter(post=OuterRef("pk"), user=viewer)),
+        return (
+            self.select_related("user")
+            .prefetch_related("images")
+            .annotate(
+                like_count=Count("likes", distinct=True),
+                want_count=Count("wants", distinct=True),
+                liked_by_me=Exists(Like.objects.filter(post=OuterRef("pk"), user=viewer)),
+                wanted_by_me=Exists(Want.objects.filter(post=OuterRef("pk"), user=viewer)),
+            )
         )
 
 
@@ -48,14 +52,14 @@ class PostManager(models.Manager.from_queryset(PostQuerySet)):
 class Post(models.Model):
     """基本設計書 4.2章 postsテーブルに対応するモデル。
 
-    画像添付（post_images）は今回のスコープ外（画像対応Issueで別途実装）のため、
-    bodyは本文・画像の少なくとも一方必須という設計書の制約とは異なり、今回は必須項目とする。
+    「本文・画像の少なくとも一方が必要」というルールはDB制約ではなくPostCreateSerializer側の
+    バリデーションで実現するため、bodyは画像のみの投稿ではNULLになりうる（NULL可）。
     """
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="posts"
     )
-    body = models.CharField(max_length=280)
+    body = models.CharField(max_length=280, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -67,6 +71,24 @@ class Post(models.Model):
 
     def __str__(self):
         return f"Post({self.id}, user={self.user_id})"
+
+
+class PostImage(models.Model):
+    """基本設計書 4.2章 post_imagesテーブルに対応するモデル。1投稿につき最大4件、
+    display_order（0始まり）で表示順を保持する。
+    """
+
+    post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name="images")
+    image_url = models.CharField(max_length=500)
+    display_order = models.PositiveSmallIntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "post_images"
+        ordering = ["display_order"]
+
+    def __str__(self):
+        return f"PostImage({self.id}, post={self.post_id})"
 
 
 class ReactionManager(models.Manager):

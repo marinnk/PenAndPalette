@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from posts.models import Like, Post, Want
+from posts.models import Like, Post, PostImage, Want
 
 
 @admin.register(Post)
@@ -9,6 +9,11 @@ class PostAdmin(admin.ModelAdmin):
 
     list_display = ["id", "user", "body", "created_at"]
     search_fields = ["body"]
+
+
+@admin.register(PostImage)
+class PostImageAdmin(admin.ModelAdmin):
+    list_display = ["id", "post", "display_order", "image_url"]
 
 
 @admin.register(Like)

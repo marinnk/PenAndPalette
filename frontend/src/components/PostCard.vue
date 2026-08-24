@@ -44,7 +44,14 @@ function goToDetail() {
       </RouterLink>
       <span class="post-card-meta">{{ formattedDate }}</span>
     </div>
-    <p class="post-card-body">{{ post.body }}</p>
+    <div
+      v-if="post.images.length > 0"
+      class="post-card-images"
+      :class="`post-card-images-${post.images.length}`"
+    >
+      <img v-for="(url, i) in post.images" :key="url" :src="url" :alt="`投稿画像${i + 1}`" />
+    </div>
+    <p v-if="post.body" class="post-card-body">{{ post.body }}</p>
     <div class="post-card-actions">
       <button
         type="button"

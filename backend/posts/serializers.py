@@ -1,6 +1,8 @@
+from django.db import transaction
 from rest_framework import serializers
 
-from posts.models import Post
+from common.storage import upload_image, validate_image_file
+from posts.models import Post, PostImage
 from users.serializers import UserSerializer
 
 
@@ -10,12 +12,12 @@ class PostSerializer(serializers.Serializer):
     like_count・want_count・liked_by_me・wanted_by_meはPost.objects.with_reactions()の
     annotate()で付与された属性をそのまま読み出す。id等のフィールドと違い、この投稿が
     ModelSerializerではなくSerializerな理由は、annotateされた属性・SerializerMethodField
-    （images・comment_count）が混在しモデルのフィールドだけでは完結しないため。
+    （body・images・comment_count）が混在しモデルのフィールドだけでは完結しないため。
     """
 
     id = serializers.IntegerField(read_only=True)
     author = UserSerializer(source="user", read_only=True)
-    body = serializers.CharField(read_only=True)
+    body = serializers.SerializerMethodField()
     images = serializers.SerializerMethodField()
     like_count = serializers.IntegerField(read_only=True)
     want_count = serializers.IntegerField(read_only=True)
@@ -25,9 +27,20 @@ class PostSerializer(serializers.Serializer):
     created_at = serializers.DateTimeField(read_only=True)
     updated_at = serializers.DateTimeField(read_only=True)
 
+    def get_body(self, obj):
+        # 画像のみの投稿はDB上body=NULLになりうるが、フロントエンドのPost.body型（string）を
+        # 変えずに済ませるため、レスポンスでは空文字に統一する
+        return obj.body or ""
+
     def get_images(self, obj):
-        # TODO(画像対応Issue): PostImageモデル実装後、実際の画像URL一覧を返すようにする
-        return []
+        # 作成直後はPostCreateSerializer.create()で構築済みのリストを使い、DBへの再クエリを
+        # 避ける（like_count等の初期値設定と同じ最適化方針）。一覧・詳細はwith_reactions()の
+        # prefetch_related("images")でキャッシュ済みのobj.images.all()を使うため、
+        # こちらも追加クエリは発生しない
+        images = getattr(obj, "_created_images", None)
+        if images is None:
+            images = obj.images.all()
+        return [image.image_url for image in images]
 
     def get_comment_count(self, obj):
         # TODO(F-4 コメント機能): Commentモデル実装後、annotate()によるCount集計に置き換える
@@ -49,16 +62,53 @@ class WantReactionSerializer(serializers.Serializer):
 
 
 class PostCreateSerializer(serializers.Serializer):
-    """POST /api/posts のリクエストボディ検証・投稿作成を担う。
-
-    基本設計書6.3章の本来の仕様（multipart/form-data、body・imagesの少なくとも一方必須）とは異なり、
-    今回は画像添付未対応のためbodyのみ・必須とする暫定narrowing（画像対応Issueで拡張する）。
+    """POST /api/posts のリクエストボディ検証・投稿作成を担う（基本設計書6.3章）。
+    multipart/form-data。body（0〜280文字）・images（0〜4枚）の少なくとも一方が必須。
     """
 
-    body = serializers.CharField(max_length=280, min_length=1, trim_whitespace=True)
+    # frontend/src/composables/usePostCreate.ts のMAX_IMAGESがこの値を複製している。
+    # 値を変更する場合は両方合わせて変更すること
+    MAX_IMAGES = 4
 
+    body = serializers.CharField(
+        max_length=280, trim_whitespace=True, required=False, allow_blank=True, default=""
+    )
+    images = serializers.ListField(child=serializers.FileField(), required=False, default=list)
+
+    def validate_images(self, value):
+        if len(value) > self.MAX_IMAGES:
+            raise serializers.ValidationError(f"画像は{self.MAX_IMAGES}枚まで添付できます。")
+        for image in value:
+            validate_image_file(image)
+        return value
+
+    def validate(self, attrs):
+        if not attrs["body"] and not attrs["images"]:
+            raise serializers.ValidationError("本文または画像のいずれかを入力してください。")
+        return attrs
+
+    @transaction.atomic
     def create(self, validated_data):
-        return Post.objects.create(user=self.context["request"].user, body=validated_data["body"])
+        # transaction.atomic: 画像のアップロード中（S3/MinIOへの書き込み）に失敗した場合、
+        # ここまでに作成したPost・PostImageのDB行を1件も残さずロールバックする。
+        # ただし既にS3/MinIOへ書き込み済みのファイル自体はDBの取り消しでは削除されない
+        # （アップロード先はDBトランザクションの対象外のため）。取りこぼした投稿が
+        # 一覧に見えてしまう不整合は防げるが、孤立したファイルの後始末は今回のスコープ外とする
+        post = Post.objects.create(
+            user=self.context["request"].user, body=validated_data["body"] or None
+        )
+        images = [
+            PostImage(
+                post=post, image_url=upload_image(image, folder="posts"), display_order=order
+            )
+            for order, image in enumerate(validated_data["images"])
+        ]
+        # 画像1枚ごとにINSERTするのではなく、まとめて1回のクエリで保存する
+        PostImage.objects.bulk_create(images)
+        # 作成直後のシリアライズ（PostSerializer.get_images）で再クエリしなくて済むよう、
+        # 作成したPostImageのリストをその場でPostインスタンスに持たせておく
+        post._created_images = images
+        return post
 
 
 class PostListQuerySerializer(serializers.Serializer):

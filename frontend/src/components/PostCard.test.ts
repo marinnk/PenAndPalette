@@ -109,4 +109,46 @@ describe('PostCard', () => {
     expect(screen.getByTestId('like-button-42')).toBeDisabled()
     expect(screen.getByTestId('want-button-42')).toBeDisabled()
   })
+
+  it('imagesが無い投稿では画像を表示しない', async () => {
+    const { router } = renderPostCard()
+    await router.isReady()
+
+    expect(screen.queryByRole('img')).not.toBeInTheDocument()
+  })
+
+  it('imagesがある投稿では画像を並べて表示する', async () => {
+    const withImages = {
+      ...post,
+      images: ['https://example.com/1.jpg', 'https://example.com/2.jpg', 'https://example.com/3.jpg'],
+    }
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: '/', name: 'timeline', component: TimelineStub },
+        { path: '/posts/:id', name: 'post-detail', component: PostDetailStub },
+        { path: '/profile/:id', name: 'profile', component: ProfileStub },
+      ],
+    })
+    render(PostCard, { props: { post: withImages }, global: { plugins: [router] } })
+    await router.isReady()
+
+    expect(screen.getAllByRole('img')).toHaveLength(3)
+  })
+
+  it('本文が空文字（画像のみ投稿）の場合は本文の段落を表示しない', async () => {
+    const imageOnly = { ...post, body: '', images: ['https://example.com/1.jpg'] }
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: '/', name: 'timeline', component: TimelineStub },
+        { path: '/posts/:id', name: 'post-detail', component: PostDetailStub },
+        { path: '/profile/:id', name: 'profile', component: ProfileStub },
+      ],
+    })
+    render(PostCard, { props: { post: imageOnly }, global: { plugins: [router] } })
+    await router.isReady()
+
+    expect(screen.queryByText('本文です')).not.toBeInTheDocument()
+  })
 })

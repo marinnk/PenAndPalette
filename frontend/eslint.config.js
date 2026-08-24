@@ -19,11 +19,13 @@ export default tseslint.config(
   eslintConfigPrettier,
   {
     languageOptions: {
-      // タイムライン画面の無限スクロール・新着通知バナー等で使うブラウザ標準API
+      // タイムライン画面の無限スクロール・新着通知バナー・投稿画像添付等で使うブラウザ標準API
       globals: {
         window: 'readonly',
         document: 'readonly',
         HTMLElement: 'readonly',
+        HTMLInputElement: 'readonly',
+        Event: 'readonly',
         IntersectionObserver: 'readonly',
         IntersectionObserverEntry: 'readonly',
       },
