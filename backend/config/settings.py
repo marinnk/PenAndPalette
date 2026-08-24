@@ -63,6 +63,7 @@ INSTALLED_APPS = [
     "core",
     "users",
     "posts",
+    "requests_app",
 ]
 
 AUTH_USER_MODEL = "users.User"

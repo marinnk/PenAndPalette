@@ -4,6 +4,7 @@
 
 from django.urls import path
 
+from requests_app.views import UserRequestCreateView
 from users.views import FollowersListView, FollowingListView, FollowView, UserProfileView
 
 urlpatterns = [
@@ -11,4 +12,5 @@ urlpatterns = [
     path("<int:user_id>/follow", FollowView.as_view(), name="user-follow"),
     path("<int:user_id>/followers", FollowersListView.as_view(), name="user-followers"),
     path("<int:user_id>/following", FollowingListView.as_view(), name="user-following"),
+    path("<int:user_id>/requests", UserRequestCreateView.as_view(), name="user-requests"),
 ]

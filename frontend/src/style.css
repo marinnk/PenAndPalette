@@ -719,6 +719,26 @@ code {
   padding: 0;
 }
 
+.profile-header-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.profile-header-actions .form-submit {
+  width: auto;
+  margin-top: 8px;
+}
+
+.received-requests {
+  margin-bottom: 24px;
+}
+
+.received-request-item {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-h);
+}
+
 /* S10 フォロー中／フォロワー一覧画面 */
 .follow-list {
   max-width: 640px;

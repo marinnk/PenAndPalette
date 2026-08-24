@@ -62,6 +62,30 @@ class PostSerializer(serializers.Serializer):
         return 0
 
 
+class PostSummarySerializer(serializers.Serializer):
+    """投稿の軽量な要約表示（基本設計書6.7章 F-6 リクエストのrelated_post埋め込み等で使う）。
+
+    PostSerializerと違いlike_count等のwith_reactions()によるannotateを前提にしないため、
+    Post.objects単体（select_related("user") + prefetch_related("images")のみ）から
+    シリアライズできる。
+    """
+
+    id = serializers.IntegerField(read_only=True)
+    author = UserSerializer(source="user", read_only=True)
+    body = serializers.SerializerMethodField()
+    image = serializers.SerializerMethodField()
+    created_at = serializers.DateTimeField(read_only=True)
+
+    def get_body(self, obj):
+        return obj.body or ""
+
+    def get_image(self, obj):
+        # 先頭1枚のURLのみ返す（一覧のサムネイル用途）。呼び出し側でprefetch_related("images")
+        # を付けている前提のため、ここでの.all()[:1]は追加クエリを発生させない
+        first = list(obj.images.all())[:1]
+        return first[0].image_url if first else None
+
+
 class LikeReactionSerializer(serializers.Serializer):
     """POST/DELETE /api/posts/{id}/likes のレスポンス整形（基本設計書6.5章）。"""
 

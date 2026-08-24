@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import AppHeader from '@/components/AppHeader.vue'
 import PostCard from '@/components/PostCard.vue'
 import { useProfile } from '@/composables/useProfile'
+import { useReceivedRequests } from '@/composables/useReceivedRequests'
 import { useAuthStore } from '@/stores/auth'
 
 // S07 プロフィール画面
@@ -27,6 +28,12 @@ const {
   deletePost,
   toggleFollow,
 } = useProfile()
+const {
+  receivedRequests,
+  loading: receivedLoading,
+  error: receivedError,
+  load: loadReceived,
+} = useReceivedRequests()
 
 const isOwnProfile = computed(() => auth.currentUser?.id === Number(props.id))
 
@@ -34,6 +41,14 @@ onMounted(() => load(Number(props.id)))
 watch(
   () => props.id,
   (id) => load(Number(id)),
+)
+// 届いたリクエストは自分のプロフィールを見ているときだけ取得する（他人のプロフィールでは不要）
+watch(
+  isOwnProfile,
+  (own) => {
+    if (own) loadReceived()
+  },
+  { immediate: true },
 )
 </script>
 
@@ -76,16 +91,25 @@ watch(
           >
             投稿する
           </button>
-          <button
-            v-else
-            type="button"
-            class="form-submit"
-            data-testid="profile-follow-button"
-            :disabled="followPending"
-            @click="toggleFollow"
-          >
-            {{ profile.followed_by_me ? 'フォロー中' : 'フォローする' }}
-          </button>
+          <div v-else class="profile-header-actions">
+            <button
+              type="button"
+              class="form-submit"
+              data-testid="profile-follow-button"
+              :disabled="followPending"
+              @click="toggleFollow"
+            >
+              {{ profile.followed_by_me ? 'フォロー中' : 'フォローする' }}
+            </button>
+            <button
+              type="button"
+              class="form-submit"
+              data-testid="profile-request-button"
+              @click="router.push({ name: 'request-create', params: { id: props.id } })"
+            >
+              リクエストする
+            </button>
+          </div>
         </div>
 
         <p v-if="followError" class="field-error" data-testid="follow-error">
@@ -97,6 +121,31 @@ watch(
         <p v-if="deleteError" class="field-error" data-testid="delete-error">
           {{ deleteError }}
         </p>
+
+        <section v-if="isOwnProfile" class="received-requests">
+          <h2>届いたリクエスト</h2>
+          <p v-if="receivedLoading" data-testid="received-requests-loading">読み込み中...</p>
+          <p v-else-if="receivedError" class="field-error" data-testid="received-requests-error">
+            リクエスト一覧の取得に失敗しました。
+          </p>
+          <template v-else>
+            <p
+              v-if="receivedRequests.length === 0"
+              class="empty-state"
+              data-testid="received-requests-empty"
+            >
+              届いたリクエストはまだありません。
+            </p>
+            <div
+              v-for="req in receivedRequests"
+              :key="req.id"
+              class="received-request-item"
+              :data-testid="`received-request-${req.id}`"
+            >
+              {{ req.from_user.display_name }} さんから：「{{ req.message }}」
+            </div>
+          </template>
+        </section>
 
         <h2>{{ profile.display_name }}の投稿</h2>
         <p v-if="posts.length === 0" class="empty-state" data-testid="profile-posts-empty">

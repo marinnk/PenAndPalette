@@ -14,6 +14,7 @@ const TimelineStub = { template: '<div>timeline</div>' }
 const PostCreateStub = { template: '<div>post-create</div>' }
 const PostDetailStub = { template: '<div>post-detail</div>' }
 const FollowListStub = { template: '<div>follow-list</div>' }
+const RequestCreateStub = { template: '<div>request-create</div>' }
 
 const profile = {
   id: 1,
@@ -43,6 +44,18 @@ function makePost(id: number) {
   }
 }
 
+// GET /api/users/1・GET /api/posts・GET /api/requests/received の3種類をまとめてモックする。
+// received-requestsはisOwnProfileの間だけ呼ばれるが、他人のプロフィールを見るテストでも
+// watch(immediate: true)の初回評価は走るため、明示的にモックしておかないと
+// 「posts一覧」用のフォールバックが誤って使われてしまう
+function mockApiClient({ posts = [] as unknown[], receivedRequests = [] as unknown[] } = {}) {
+  vi.mocked(apiClient.get).mockImplementation((url: string) => {
+    if (url === '/api/users/1') return Promise.resolve({ data: profile })
+    if (url === '/api/requests/received') return Promise.resolve({ data: receivedRequests })
+    return Promise.resolve({ data: { results: posts, has_more: false } })
+  })
+}
+
 function renderProfileView(currentUserId: number) {
   const pinia = createPinia()
   setActivePinia(pinia)
@@ -61,6 +74,11 @@ function renderProfileView(currentUserId: number) {
       { path: '/posts/new', name: 'post-create', component: PostCreateStub },
       { path: '/posts/:id', name: 'post-detail', component: PostDetailStub },
       { path: '/profile/:id', name: 'profile', component: ProfileView, props: true },
+      {
+        path: '/profile/:id/requests/new',
+        name: 'request-create',
+        component: RequestCreateStub,
+      },
       { path: '/profile/:id/following', name: 'profile-following', component: FollowListStub },
       { path: '/profile/:id/followers', name: 'profile-followers', component: FollowListStub },
     ],
@@ -77,10 +95,7 @@ beforeEach(() => {
 
 describe('ProfileView', () => {
   it('プロフィール情報と投稿一覧を表示する', async () => {
-    vi.mocked(apiClient.get).mockImplementation((url: string) => {
-      if (url === '/api/users/1') return Promise.resolve({ data: profile })
-      return Promise.resolve({ data: { results: [], has_more: false } })
-    })
+    mockApiClient()
     renderProfileView(1)
 
     await waitFor(() => {
@@ -90,10 +105,7 @@ describe('ProfileView', () => {
   })
 
   it('自分のプロフィールでは「投稿する」ボタンが表示される', async () => {
-    vi.mocked(apiClient.get).mockImplementation((url: string) => {
-      if (url === '/api/users/1') return Promise.resolve({ data: profile })
-      return Promise.resolve({ data: { results: [], has_more: false } })
-    })
+    mockApiClient()
     renderProfileView(1)
 
     await waitFor(() => {
@@ -102,10 +114,7 @@ describe('ProfileView', () => {
   })
 
   it('他人のプロフィールでは「投稿する」ボタンは表示されない', async () => {
-    vi.mocked(apiClient.get).mockImplementation((url: string) => {
-      if (url === '/api/users/1') return Promise.resolve({ data: profile })
-      return Promise.resolve({ data: { results: [], has_more: false } })
-    })
+    mockApiClient()
     renderProfileView(999)
 
     await waitFor(() => {
@@ -116,10 +125,7 @@ describe('ProfileView', () => {
 
   it('自分の投稿の削除ボタン→確認後に一覧からその場で取り除かれる', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
-    vi.mocked(apiClient.get).mockImplementation((url: string) => {
-      if (url === '/api/users/1') return Promise.resolve({ data: profile })
-      return Promise.resolve({ data: { results: [makePost(1)], has_more: false } })
-    })
+    mockApiClient({ posts: [makePost(1)] })
     renderProfileView(1)
     await waitFor(() => expect(screen.getByText('投稿1')).toBeInTheDocument())
 
@@ -143,10 +149,7 @@ describe('ProfileView', () => {
   })
 
   it('フォロー中/フォロワー数を表示する', async () => {
-    vi.mocked(apiClient.get).mockImplementation((url: string) => {
-      if (url === '/api/users/1') return Promise.resolve({ data: profile })
-      return Promise.resolve({ data: { results: [], has_more: false } })
-    })
+    mockApiClient()
     renderProfileView(999)
 
     await waitFor(() => {
@@ -155,24 +158,19 @@ describe('ProfileView', () => {
     })
   })
 
-  it('自分のプロフィールでは「フォローする」ボタンは表示されない', async () => {
-    vi.mocked(apiClient.get).mockImplementation((url: string) => {
-      if (url === '/api/users/1') return Promise.resolve({ data: profile })
-      return Promise.resolve({ data: { results: [], has_more: false } })
-    })
+  it('自分のプロフィールでは「フォローする」「リクエストする」ボタンは表示されない', async () => {
+    mockApiClient()
     renderProfileView(1)
 
     await waitFor(() => {
       expect(screen.getByTestId('profile-display-name')).toBeInTheDocument()
     })
     expect(screen.queryByTestId('profile-follow-button')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('profile-request-button')).not.toBeInTheDocument()
   })
 
   it('他人のプロフィールで「フォローする」ボタンを押すとフォローし、表示が切り替わる', async () => {
-    vi.mocked(apiClient.get).mockImplementation((url: string) => {
-      if (url === '/api/users/1') return Promise.resolve({ data: profile })
-      return Promise.resolve({ data: { results: [], has_more: false } })
-    })
+    mockApiClient()
     renderProfileView(999)
     await waitFor(() => expect(screen.getByTestId('profile-follow-button')).toBeInTheDocument())
 
@@ -185,6 +183,61 @@ describe('ProfileView', () => {
       expect(apiClient.post).toHaveBeenCalledWith('/api/users/1/follow')
       expect(screen.getByTestId('profile-follow-button')).toHaveTextContent('フォロー中')
       expect(screen.getByTestId('profile-follower-count')).toHaveTextContent('フォロワー 9')
+    })
+  })
+
+  it('他人のプロフィールでは「リクエストする」ボタンが表示され、押すとリクエスト作成画面に遷移する', async () => {
+    mockApiClient()
+    const { router } = renderProfileView(999)
+    await waitFor(() => expect(screen.getByTestId('profile-request-button')).toBeInTheDocument())
+
+    await fireEvent.click(screen.getByTestId('profile-request-button'))
+
+    await waitFor(() => {
+      expect(router.currentRoute.value.name).toBe('request-create')
+      expect(router.currentRoute.value.params.id).toBe('1')
+    })
+  })
+
+  it('他人のプロフィールでは「届いたリクエスト」セクションが表示されない', async () => {
+    mockApiClient()
+    renderProfileView(999)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('profile-display-name')).toBeInTheDocument()
+    })
+    expect(screen.queryByText('届いたリクエスト')).not.toBeInTheDocument()
+    expect(apiClient.get).not.toHaveBeenCalledWith('/api/requests/received')
+  })
+
+  it('自分のプロフィールでは届いたリクエストの一覧を表示する', async () => {
+    mockApiClient({
+      receivedRequests: [
+        {
+          id: 1,
+          from_user: { id: 6, username: 'roku', display_name: 'ユーザーF', avatar_url: null },
+          related_post: null,
+          message: 'この場面の続きを書いてほしいです',
+          created_at: '2026-08-24T00:00:00Z',
+        },
+      ],
+    })
+    renderProfileView(1)
+
+    await waitFor(() => {
+      expect(apiClient.get).toHaveBeenCalledWith('/api/requests/received')
+      expect(screen.getByTestId('received-request-1')).toHaveTextContent(
+        'ユーザーF さんから：「この場面の続きを書いてほしいです」',
+      )
+    })
+  })
+
+  it('自分のプロフィールで届いたリクエストが無い場合は空状態を表示する', async () => {
+    mockApiClient()
+    renderProfileView(1)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('received-requests-empty')).toBeInTheDocument()
     })
   })
 })
