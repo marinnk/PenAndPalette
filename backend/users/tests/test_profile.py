@@ -1,6 +1,7 @@
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from users.models import Follow
 from users.tests.conftest import DEFAULT_PASSWORD, create_user
 
 
@@ -40,8 +41,24 @@ class UserProfileTests(APITestCase):
                 "display_name": "Target User",
                 "bio": "よろしくお願いします",
                 "avatar_url": None,
+                "follower_count": 0,
+                "following_count": 0,
+                "followed_by_me": False,
             },
         )
+
+    def test_profile_reflects_follow_stats(self):
+        self._login()
+        Follow.objects.add(self.viewer, self.target)
+        third = create_user(username="third", email="third@example.com", display_name="Third User")
+        Follow.objects.add(self.target, third)
+
+        response = self.client.get(f"/api/users/{self.target.id}")
+
+        body = response.json()
+        self.assertEqual(body["follower_count"], 1)
+        self.assertEqual(body["following_count"], 1)
+        self.assertTrue(body["followed_by_me"])
 
     def test_profile_with_nonexistent_id_returns_404(self):
         self._login()

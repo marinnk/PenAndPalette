@@ -4,6 +4,7 @@ import PostCreateView from '@/views/PostCreateView.vue'
 import PostEditView from '@/views/PostEditView.vue'
 import PostDetailView from '@/views/PostDetailView.vue'
 import ProfileView from '@/views/ProfileView.vue'
+import FollowListView from '@/views/FollowListView.vue'
 import LoginView from '@/views/LoginView.vue'
 import RegisterView from '@/views/RegisterView.vue'
 import { useAuthStore } from '@/stores/auth'
@@ -17,9 +18,9 @@ declare module 'vue-router' {
   }
 }
 
-// 画面設計書のS06・S08・S09・S10は、各機能を実装するIssueで追加する。
+// 画面設計書のS06・S08・S09は、各機能を実装するIssueで追加する。
 // 今回実装するのはS01（ログイン）・S02（新規登録）・S03（タイムライン）・
-// S04（投稿作成、スタブ）・S05（投稿詳細、スタブ）・S07（プロフィール、スタブ）
+// S04（投稿作成、スタブ）・S05（投稿詳細、スタブ）・S07（プロフィール）・S10（フォロー中／フォロワー一覧）
 export const router = createRouter({
   history: createWebHistory(),
   routes: [
@@ -28,6 +29,18 @@ export const router = createRouter({
     { path: '/posts/:id/edit', name: 'post-edit', component: PostEditView, props: true },
     { path: '/posts/:id', name: 'post-detail', component: PostDetailView, props: true },
     { path: '/profile/:id', name: 'profile', component: ProfileView, props: true },
+    {
+      path: '/profile/:id/following',
+      name: 'profile-following',
+      component: FollowListView,
+      props: (route) => ({ id: route.params.id, tab: 'following' }),
+    },
+    {
+      path: '/profile/:id/followers',
+      name: 'profile-followers',
+      component: FollowListView,
+      props: (route) => ({ id: route.params.id, tab: 'followers' }),
+    },
     { path: '/login', name: 'login', component: LoginView, meta: { guestOnly: true } },
     { path: '/register', name: 'register', component: RegisterView, meta: { guestOnly: true } },
   ],

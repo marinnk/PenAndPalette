@@ -7,7 +7,16 @@ vi.mock('@/lib/apiClient', () => ({
   apiClient: { get: vi.fn(), post: vi.fn(), delete: vi.fn() },
 }))
 
-const profile = { id: 1, username: 'taro', display_name: '太郎', bio: 'よろしく', avatar_url: null }
+const profile = {
+  id: 1,
+  username: 'taro',
+  display_name: '太郎',
+  bio: 'よろしく',
+  avatar_url: null,
+  follower_count: 0,
+  following_count: 0,
+  followed_by_me: false,
+}
 
 function makePost(id: number, overrides: Partial<Post> = {}): Post {
   return {
@@ -95,5 +104,57 @@ describe('useProfile', () => {
     expect(apiClient.post).toHaveBeenCalledWith('/api/posts/1/wants')
     expect(posts.value[0].want_count).toBe(1)
     expect(posts.value[1].want_count).toBe(0)
+  })
+
+  it('toggleFollow: 未フォロー状態からPOSTしてfollowed_by_me/follower_countを反映する', async () => {
+    vi.mocked(apiClient.get).mockImplementation((url: string) => {
+      if (url === '/api/users/1') return Promise.resolve({ data: profile })
+      return Promise.resolve({ data: { results: [], has_more: false } })
+    })
+    const { load, profile: loadedProfile, toggleFollow } = useProfile()
+    await load(1)
+
+    vi.mocked(apiClient.post).mockResolvedValueOnce({
+      data: { followed_by_me: true, follower_count: 1 },
+    })
+    await toggleFollow()
+
+    expect(apiClient.post).toHaveBeenCalledWith('/api/users/1/follow')
+    expect(loadedProfile.value?.followed_by_me).toBe(true)
+    expect(loadedProfile.value?.follower_count).toBe(1)
+  })
+
+  it('toggleFollow: フォロー済みからDELETEして解除する', async () => {
+    vi.mocked(apiClient.get).mockImplementation((url: string) => {
+      if (url === '/api/users/1') {
+        return Promise.resolve({ data: { ...profile, followed_by_me: true, follower_count: 1 } })
+      }
+      return Promise.resolve({ data: { results: [], has_more: false } })
+    })
+    const { load, profile: loadedProfile, toggleFollow } = useProfile()
+    await load(1)
+
+    vi.mocked(apiClient.delete).mockResolvedValueOnce({
+      data: { followed_by_me: false, follower_count: 0 },
+    })
+    await toggleFollow()
+
+    expect(apiClient.delete).toHaveBeenCalledWith('/api/users/1/follow')
+    expect(loadedProfile.value?.followed_by_me).toBe(false)
+    expect(loadedProfile.value?.follower_count).toBe(0)
+  })
+
+  it('toggleFollow: 失敗時はfollowErrorを設定する', async () => {
+    vi.mocked(apiClient.get).mockImplementation((url: string) => {
+      if (url === '/api/users/1') return Promise.resolve({ data: profile })
+      return Promise.resolve({ data: { results: [], has_more: false } })
+    })
+    const { load, followError, toggleFollow } = useProfile()
+    await load(1)
+
+    vi.mocked(apiClient.post).mockRejectedValueOnce(new Error('network error'))
+    await toggleFollow()
+
+    expect(followError.value).not.toBeNull()
   })
 })

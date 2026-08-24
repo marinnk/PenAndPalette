@@ -1,10 +1,25 @@
 from django.contrib.auth.base_user import BaseUserManager
+from django.db.models import Count, Exists, OuterRef
 
 
 class UserManager(BaseUserManager):
     """`email`を識別子（USERNAME_FIELD）として利用者を作成するマネージャー。"""
 
     use_in_migrations = True
+
+    def with_follow_stats(self, viewer):
+        """フォロー中/フォロワー数・フォロー中かどうかを1クエリで付与する（基本設計書6.6章）。
+
+        posts.PostQuerySet.with_reactions()と同じ理由（JOINの直積による水増し）で、
+        followers・followingの2つの逆参照をCountする際はdistinct=Trueが必須。
+        """
+        from users.models import Follow
+
+        return self.annotate(
+            follower_count=Count("followers", distinct=True),
+            following_count=Count("following", distinct=True),
+            followed_by_me=Exists(Follow.objects.filter(follower=viewer, followee=OuterRef("pk"))),
+        )
 
     def _create_user(self, username, email, display_name, password, **extra_fields):
         if not username:

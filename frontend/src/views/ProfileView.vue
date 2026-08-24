@@ -6,8 +6,7 @@ import PostCard from '@/components/PostCard.vue'
 import { useProfile } from '@/composables/useProfile'
 import { useAuthStore } from '@/stores/auth'
 
-// S07 プロフィール画面（今回はフォロー中/フォロワー数・フォロー/リクエストボタンを
-// 含まないスタブ）
+// S07 プロフィール画面
 const props = defineProps<{ id: string }>()
 const router = useRouter()
 const auth = useAuthStore()
@@ -20,10 +19,13 @@ const {
   isPending,
   deleteError,
   isDeleting,
+  followError,
+  followPending,
   load,
   toggleLike,
   toggleWant,
   deletePost,
+  toggleFollow,
 } = useProfile()
 
 const isOwnProfile = computed(() => auth.currentUser?.id === Number(props.id))
@@ -47,6 +49,24 @@ watch(
         <div class="profile-header">
           <h1 data-testid="profile-display-name">{{ profile.display_name }}</h1>
           <p v-if="profile.bio" data-testid="profile-bio">{{ profile.bio }}</p>
+          <p class="profile-follow-counts">
+            <button
+              type="button"
+              class="profile-follow-count"
+              data-testid="profile-following-count"
+              @click="router.push({ name: 'profile-following', params: { id: props.id } })"
+            >
+              フォロー中 {{ profile.following_count }}
+            </button>
+            <button
+              type="button"
+              class="profile-follow-count"
+              data-testid="profile-follower-count"
+              @click="router.push({ name: 'profile-followers', params: { id: props.id } })"
+            >
+              フォロワー {{ profile.follower_count }}
+            </button>
+          </p>
           <button
             v-if="isOwnProfile"
             type="button"
@@ -56,8 +76,21 @@ watch(
           >
             投稿する
           </button>
+          <button
+            v-else
+            type="button"
+            class="form-submit"
+            data-testid="profile-follow-button"
+            :disabled="followPending"
+            @click="toggleFollow"
+          >
+            {{ profile.followed_by_me ? 'フォロー中' : 'フォローする' }}
+          </button>
         </div>
 
+        <p v-if="followError" class="field-error" data-testid="follow-error">
+          {{ followError }}
+        </p>
         <p v-if="reactionError" class="field-error" data-testid="reaction-error">
           {{ reactionError }}
         </p>
