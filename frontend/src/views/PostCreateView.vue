@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import PostComposeForm from '@/components/PostComposeForm.vue'
 import { usePostCreate } from '@/composables/usePostCreate'
+import { MAX_IMAGES } from '@/composables/postImageValidation'
 
 // S04 投稿作成画面
 const router = useRouter()
@@ -37,7 +38,7 @@ async function handleSubmit() {
     mode="create"
     :body="body"
     :image-previews="imagePreviews"
-    :can-add-more="images.length < 4"
+    :can-add-more="images.length < MAX_IMAGES"
     :submit-disabled="body.trim().length === 0 && images.length === 0"
     :submitting="submitting"
     :error-message="errorMessage"

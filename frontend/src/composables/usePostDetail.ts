@@ -17,6 +17,7 @@ export function usePostDetail() {
   async function load(postId: number) {
     loading.value = true
     error.value = false
+    deleteError.value = null
     try {
       const { data } = await apiClient.get<Post>(`/api/posts/${postId}`)
       post.value = data

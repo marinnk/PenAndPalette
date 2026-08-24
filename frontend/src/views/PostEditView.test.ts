@@ -101,6 +101,35 @@ describe('PostEditView', () => {
     })
   })
 
+  it('別の投稿idへ遷移すると読み込みし直される（コンポーネント再利用時の再読み込み）', async () => {
+    // Vue Routerは同じルートレコード内の遷移（/posts/:id/edit → /posts/:otherId/edit）で
+    // コンポーネントインスタンスを使い回すため、実際の挙動に合わせてidのprops変更を
+    // rerenderで再現する（PostDetailView.test.tsと同じパターン）
+    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: existingPost })
+    const { rerender } = renderPostEditView()
+    await waitFor(() => expect(screen.getByTestId('post-body')).toHaveValue('編集前の本文'))
+
+    vi.mocked(apiClient.get).mockResolvedValueOnce({
+      data: { ...existingPost, id: 2, body: '別の投稿の本文', images: [], image_ids: [] },
+    })
+    await rerender({ id: '2' })
+
+    await waitFor(() => {
+      expect(apiClient.get).toHaveBeenLastCalledWith('/api/posts/2')
+      expect(screen.getByTestId('post-body')).toHaveValue('別の投稿の本文')
+    })
+  })
+
+  it('存在しない投稿を開くと、空フォームではなくエラーメッセージを表示する', async () => {
+    vi.mocked(apiClient.get).mockRejectedValueOnce(new Error('not found'))
+    renderPostEditView()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('post-edit-error')).toBeInTheDocument()
+    })
+    expect(screen.queryByTestId('post-body')).not.toBeInTheDocument()
+  })
+
   it('既存画像の削除ボタンでkeep_image_idsから除外される', async () => {
     vi.mocked(apiClient.get).mockResolvedValueOnce({ data: existingPost })
     const { router } = renderPostEditView()

@@ -51,7 +51,9 @@ class PostUpdateTests(APITestCase):
     def test_update_body_only_returns_200(self):
         self._login()
 
-        response = self.client.put(self._url(), {"body": "更新後の本文"}, format="multipart")
+        response = self.client.put(
+            self._url(), {"body": "更新後の本文", "keep_image_ids": ""}, format="multipart"
+        )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         body = response.json()
@@ -62,9 +64,21 @@ class PostUpdateTests(APITestCase):
     def test_update_without_body_or_images_returns_400(self):
         self._login()
 
-        response = self.client.put(self._url(), {"body": ""}, format="multipart")
+        response = self.client.put(
+            self._url(), {"body": "", "keep_image_ids": ""}, format="multipart"
+        )
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_update_without_keep_image_ids_returns_400(self):
+        # keep_image_idsは必須（省略時に「画像は変更しない」ではなく「全削除」と誤解釈させない
+        # ための仕様、PostUpdateSerializer.keep_image_ids参照）。省略した場合はバリデーションエラー
+        self._login()
+
+        response = self.client.put(self._url(), {"body": "本文のみ"}, format="multipart")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("keep_image_ids", response.json())
 
     def test_update_keeps_and_adds_images(self):
         image1 = create_post_image(
@@ -145,7 +159,11 @@ class PostUpdateTests(APITestCase):
 
         response = self.client.put(
             self._url(),
-            {"body": "不正な画像", "images": [make_image("a.txt", "text/plain")]},
+            {
+                "body": "不正な画像",
+                "keep_image_ids": "",
+                "images": [make_image("a.txt", "text/plain")],
+            },
             format="multipart",
         )
 
@@ -164,7 +182,7 @@ class PostUpdateTests(APITestCase):
         ):
             response = self.client.put(
                 self._url(),
-                {"body": "失敗させる", "images": [make_image("a.jpg")]},
+                {"body": "失敗させる", "keep_image_ids": "", "images": [make_image("a.jpg")]},
                 format="multipart",
             )
 
@@ -173,3 +191,51 @@ class PostUpdateTests(APITestCase):
         self.assertEqual(self.post.body, "編集前の本文")
         self.assertTrue(PostImage.objects.filter(id=image1.id).exists())
         mock_delete.assert_not_called()
+
+    def test_update_cleans_up_uploaded_image_when_a_later_upload_fails(self):
+        # 2枚の新規画像のうち1枚目のアップロードが成功した直後に2枚目が失敗した場合、
+        # DBはtransaction.atomicでロールバックされるが、既にS3へ書き込み済みの1枚目は
+        # 自動では消えない。PostUpdateSerializer.updateが自分でクリーンアップすることを確認する
+        self._login()
+        self.client.raise_request_exception = False
+
+        with (
+            patch(
+                "posts.serializers.upload_image",
+                side_effect=["https://example.com/uploaded.jpg", OSError],
+            ),
+            patch("posts.serializers.delete_image") as mock_delete,
+        ):
+            response = self.client.put(
+                self._url(),
+                {
+                    "body": "アップロード失敗",
+                    "keep_image_ids": "",
+                    "images": [make_image("a.jpg"), make_image("b.jpg")],
+                },
+                format="multipart",
+            )
+
+        self.assertEqual(response.status_code, status.HTTP_500_INTERNAL_SERVER_ERROR)
+        mock_delete.assert_called_once_with("https://example.com/uploaded.jpg")
+        self.assertEqual(PostImage.objects.filter(post=self.post).count(), 0)
+
+    def test_update_succeeds_even_if_removed_image_delete_fails(self):
+        # DBの更新は既に確定しているため、後始末のS3削除が1件失敗しても
+        # レスポンス自体は成功として返し、残りの削除も試みることを確認する
+        image1 = create_post_image(
+            self.post, image_url="https://example.com/1.jpg", display_order=0
+        )
+        image2 = create_post_image(
+            self.post, image_url="https://example.com/2.jpg", display_order=1
+        )
+        self._login()
+
+        with patch("posts.views.delete_image", side_effect=[OSError, None]) as mock_delete:
+            response = self.client.put(
+                self._url(), {"body": "画像を全部消す", "keep_image_ids": ""}, format="multipart"
+            )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(mock_delete.call_count, 2)
+        self.assertFalse(PostImage.objects.filter(id__in=[image1.id, image2.id]).exists())

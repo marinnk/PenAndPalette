@@ -96,6 +96,16 @@ function onFileSelected(event: Event) {
         >
           {{ message }}
         </p>
+        <!-- keep_image_idsはバックエンド側のバリデーション項目名で、単独のフォーム欄には
+        対応しないため、画像欄のエラーとしてまとめて表示する -->
+        <p
+          v-for="message in fieldErrors.keep_image_ids ?? []"
+          :key="message"
+          class="field-error"
+          data-testid="post-image-error"
+        >
+          {{ message }}
+        </p>
       </div>
 
       <p v-if="errorMessage" class="field-error" data-testid="post-compose-error">

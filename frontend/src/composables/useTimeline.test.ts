@@ -179,6 +179,51 @@ describe('useTimeline', () => {
     timeline.stopPolling()
   })
 
+  it('loadMore(): 表示中の投稿を全部削除してもhasMoreがtrueなら追加読み込みできる', async () => {
+    vi.mocked(apiClient.get).mockResolvedValueOnce({
+      data: { results: [makePost(1)], has_more: true },
+    })
+    const timeline = useTimeline()
+    await timeline.load()
+
+    vi.mocked(apiClient.delete).mockResolvedValueOnce({})
+    await timeline.deletePost(timeline.posts.value[0])
+    expect(timeline.posts.value).toHaveLength(0)
+
+    vi.mocked(apiClient.get).mockResolvedValueOnce({
+      data: { results: [makePost(0)], has_more: false },
+    })
+    await timeline.loadMore()
+
+    // 削除前に読み込んでいた投稿1のidを基準に、その続きが取得できること
+    // （posts.valueが空になっていてもbefore_idの基準を見失わない）
+    expect(apiClient.get).toHaveBeenLastCalledWith('/api/posts', {
+      params: { scope: 'all', before_id: 1, limit: 20 },
+    })
+    expect(timeline.posts.value.map((p) => p.id)).toEqual([0])
+    timeline.stopPolling()
+  })
+
+  it('load(): 前回の削除失敗エラーは新しい読み込みでクリアされる', async () => {
+    vi.mocked(apiClient.get).mockResolvedValueOnce({
+      data: { results: [makePost(1)], has_more: false },
+    })
+    const timeline = useTimeline()
+    await timeline.load()
+
+    vi.mocked(apiClient.delete).mockRejectedValueOnce(new Error('network error'))
+    await timeline.deletePost(timeline.posts.value[0])
+    expect(timeline.deleteError.value).not.toBeNull()
+
+    vi.mocked(apiClient.get).mockResolvedValueOnce({
+      data: { results: [makePost(2)], has_more: false },
+    })
+    await timeline.load('following')
+
+    expect(timeline.deleteError.value).toBeNull()
+    timeline.stopPolling()
+  })
+
   it('toggleLike(): 失敗時はreactionErrorにメッセージを設定する', async () => {
     vi.mocked(apiClient.get).mockResolvedValueOnce({
       data: { results: [makePost(1)], has_more: false },

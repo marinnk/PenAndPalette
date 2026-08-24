@@ -1,9 +1,15 @@
 from django.db import models, transaction
 from rest_framework import serializers
 
-from common.storage import upload_image, validate_image_file
+from common.storage import delete_image, upload_image, validate_image_file
 from posts.models import Post, PostImage
 from users.serializers import UserSerializer
+
+# 投稿に添付できる画像の上限枚数（基本設計書6.3章）。PostCreateSerializer・
+# PostUpdateSerializerの両方がこの1箇所を参照する。
+# frontend/src/composables/postImageValidation.ts のMAX_IMAGESがこの値を複製している。
+# 値を変更する場合は両方合わせて変更すること
+MAX_POST_IMAGES = 4
 
 
 class PostSerializer(serializers.Serializer):
@@ -33,23 +39,23 @@ class PostSerializer(serializers.Serializer):
         # 変えずに済ませるため、レスポンスでは空文字に統一する
         return obj.body or ""
 
-    def get_images(self, obj):
+    def _resolve_images(self, obj):
         # 作成直後はPostCreateSerializer.create()で構築済みのリストを使い、DBへの再クエリを
         # 避ける（like_count等の初期値設定と同じ最適化方針）。一覧・詳細はwith_reactions()の
         # prefetch_related("images")でキャッシュ済みのobj.images.all()を使うため、
-        # こちらも追加クエリは発生しない
+        # こちらも追加クエリは発生しない。get_images・get_image_idsの両方から呼ばれる
         images = getattr(obj, "_created_images", None)
         if images is None:
             images = obj.images.all()
-        return [image.image_url for image in images]
+        return images
+
+    def get_images(self, obj):
+        return [image.image_url for image in self._resolve_images(obj)]
 
     def get_image_ids(self, obj):
         # imagesと同じ並び順（どちらもdisplay_order順）のid配列。投稿編集画面で
         # 「残す既存画像」を指定するkeep_image_idsに使う（基本設計書6.3章）
-        images = getattr(obj, "_created_images", None)
-        if images is None:
-            images = obj.images.all()
-        return [image.id for image in images]
+        return [image.id for image in self._resolve_images(obj)]
 
     def get_comment_count(self, obj):
         # TODO(F-4 コメント機能): Commentモデル実装後、annotate()によるCount集計に置き換える
@@ -75,9 +81,7 @@ class PostCreateSerializer(serializers.Serializer):
     multipart/form-data。body（0〜280文字）・images（0〜4枚）の少なくとも一方が必須。
     """
 
-    # frontend/src/composables/usePostCreate.ts のMAX_IMAGESがこの値を複製している。
-    # 値を変更する場合は両方合わせて変更すること
-    MAX_IMAGES = 4
+    MAX_IMAGES = MAX_POST_IMAGES
 
     body = serializers.CharField(
         max_length=280, trim_whitespace=True, required=False, allow_blank=True, default=""
@@ -129,7 +133,11 @@ class PostUpdateSerializer(serializers.Serializer):
     body = serializers.CharField(
         max_length=280, trim_whitespace=True, required=False, allow_blank=True, default=""
     )
-    keep_image_ids = serializers.CharField(required=False, allow_blank=True, default="")
+    # required=True: 省略・空文字を区別できないと「省略＝画像は変更しない」つもりの呼び出しが
+    # 「keep_ids=[] → 既存画像を全削除」になってしまう危険な仕様になる（本文だけ直すつもりが
+    # 画像を全部失う等）。必須にすることで、画像を全部消したい場合も明示的に空文字を送らせ、
+    # 「省略」と「意図的に0件」を区別できるようにする
+    keep_image_ids = serializers.CharField(allow_blank=True)
     images = serializers.ListField(child=serializers.FileField(), required=False, default=list)
 
     def validate_keep_image_ids(self, value):
@@ -147,20 +155,16 @@ class PostUpdateSerializer(serializers.Serializer):
         return ids
 
     def validate_images(self, value):
-        if len(value) > PostCreateSerializer.MAX_IMAGES:
-            raise serializers.ValidationError(
-                f"画像は{PostCreateSerializer.MAX_IMAGES}枚まで添付できます。"
-            )
+        if len(value) > MAX_POST_IMAGES:
+            raise serializers.ValidationError(f"画像は{MAX_POST_IMAGES}枚まで添付できます。")
         for image in value:
             validate_image_file(image)
         return value
 
     def validate(self, attrs):
         total_images = len(attrs.get("keep_image_ids", [])) + len(attrs.get("images", []))
-        if total_images > PostCreateSerializer.MAX_IMAGES:
-            raise serializers.ValidationError(
-                f"画像は{PostCreateSerializer.MAX_IMAGES}枚まで添付できます。"
-            )
+        if total_images > MAX_POST_IMAGES:
+            raise serializers.ValidationError(f"画像は{MAX_POST_IMAGES}枚まで添付できます。")
         if not attrs["body"] and total_images == 0:
             raise serializers.ValidationError("本文または画像のいずれかを入力してください。")
         return attrs
@@ -183,14 +187,22 @@ class PostUpdateSerializer(serializers.Serializer):
 
         next_order = instance.images.aggregate(models.Max("display_order"))["display_order__max"]
         next_order = 0 if next_order is None else next_order + 1
-        new_images = [
-            PostImage(
-                post=instance,
-                image_url=upload_image(image, folder="posts"),
-                display_order=next_order + order,
-            )
-            for order, image in enumerate(validated_data["images"])
-        ]
+        new_images = []
+        uploaded_urls = []
+        try:
+            for order, image in enumerate(validated_data["images"]):
+                # 2枚目以降のアップロードが失敗した場合、このtransaction.atomicブロックは
+                # DB側をロールバックするが、既にS3へ書き込み済みの1枚目のファイルは
+                # ロールバックの対象外で孤立してしまう。ここで例外時に自分でクリーンアップする
+                url = upload_image(image, folder="posts")
+                uploaded_urls.append(url)
+                new_images.append(
+                    PostImage(post=instance, image_url=url, display_order=next_order + order)
+                )
+        except Exception:
+            for url in uploaded_urls:
+                delete_image(url)
+            raise
         PostImage.objects.bulk_create(new_images)
 
         instance._removed_image_urls = removed_urls

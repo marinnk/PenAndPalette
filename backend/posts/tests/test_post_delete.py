@@ -78,3 +78,17 @@ class PostDeleteTests(APITestCase):
             self.client.delete(self._url())
 
         mock_delete.assert_not_called()
+
+    def test_delete_succeeds_even_if_one_image_delete_fails(self):
+        # 投稿自体のDB削除は既に確定しているため、S3の後始末が1件失敗しても
+        # レスポンスは204のまま成功として返し、残りの画像の削除も試みることを確認する
+        create_post_image(self.post, image_url="https://example.com/1.jpg", display_order=0)
+        create_post_image(self.post, image_url="https://example.com/2.jpg", display_order=1)
+        self._login()
+
+        with patch("posts.views.delete_image", side_effect=[OSError, None]) as mock_delete:
+            response = self.client.delete(self._url())
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(mock_delete.call_count, 2)
+        self.assertFalse(Post.objects.filter(id=self.post.id).exists())

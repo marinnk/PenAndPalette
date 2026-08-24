@@ -11,19 +11,22 @@ function makeFile(name = 'a.jpg', type = 'image/jpeg', size = 1024) {
   return new File([new Uint8Array(size)], name, { type })
 }
 
-const samplePost: Post = {
-  id: 1,
-  author: { id: 1, username: 'author', display_name: '投稿者', avatar_url: null },
-  body: '編集前の本文',
-  images: ['https://example.com/1.jpg', 'https://example.com/2.jpg'],
-  image_ids: [10, 11],
-  like_count: 0,
-  want_count: 0,
-  comment_count: 0,
-  liked_by_me: false,
-  wanted_by_me: false,
-  created_at: '2026-08-23T00:00:00Z',
-  updated_at: '2026-08-23T00:00:00Z',
+function makePost(overrides: Partial<Post> = {}): Post {
+  return {
+    id: 1,
+    author: { id: 1, username: 'author', display_name: '投稿者', avatar_url: null },
+    body: '編集前の本文',
+    images: ['https://example.com/1.jpg', 'https://example.com/2.jpg'],
+    image_ids: [10, 11],
+    like_count: 0,
+    want_count: 0,
+    comment_count: 0,
+    liked_by_me: false,
+    wanted_by_me: false,
+    created_at: '2026-08-23T00:00:00Z',
+    updated_at: '2026-08-23T00:00:00Z',
+    ...overrides,
+  }
 }
 
 URL.createObjectURL = vi.fn(() => 'blob:mock-url')
@@ -36,10 +39,10 @@ beforeEach(() => {
 
 describe('usePostEdit', () => {
   it('load: 既存の本文・画像id・画像URLで初期化する', async () => {
-    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: samplePost })
+    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: makePost() })
 
-    const { load, body, keepImageIds, keepImagePreviews, loading } = usePostEdit(1)
-    await load()
+    const { load, body, keepImageIds, keepImagePreviews, loading, loadError } = usePostEdit()
+    await load(1)
 
     expect(apiClient.get).toHaveBeenCalledWith('/api/posts/1')
     expect(body.value).toBe('編集前の本文')
@@ -49,21 +52,51 @@ describe('usePostEdit', () => {
       'https://example.com/2.jpg',
     ])
     expect(loading.value).toBe(false)
+    expect(loadError.value).toBe(false)
   })
 
-  it('load: 失敗したらerrorMessageが設定される', async () => {
+  it('load: 失敗したらloadErrorがtrueになる', async () => {
     vi.mocked(apiClient.get).mockRejectedValueOnce(new Error('not found'))
 
-    const { load, errorMessage } = usePostEdit(1)
-    await load()
+    const { load, loadError } = usePostEdit()
+    await load(1)
 
-    expect(errorMessage.value).toBe('投稿の読み込みに失敗しました。')
+    expect(loadError.value).toBe(true)
+  })
+
+  it('load: 別のidで再度呼ぶと、その投稿の内容に更新される（コンポーネント再利用を想定）', async () => {
+    // usePostEdit()は1回だけ呼び出し、同じインスタンスに対してload(1)→load(2)する。
+    // これはVue Routerが/posts/1/edit→/posts/2/editでコンポーネントを再利用する状況の再現
+    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: makePost({ id: 1, body: '投稿1' }) })
+    const { load, body } = usePostEdit()
+    await load(1)
+    expect(body.value).toBe('投稿1')
+
+    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: makePost({ id: 2, body: '投稿2' }) })
+    await load(2)
+
+    expect(apiClient.get).toHaveBeenLastCalledWith('/api/posts/2')
+    expect(body.value).toBe('投稿2')
+  })
+
+  it('load: 別のidを読み込むと、前の投稿で選択していた未送信の新規画像はクリアされる', async () => {
+    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: makePost({ id: 1 }) })
+    const { load, images, imagePreviews, addImage } = usePostEdit()
+    await load(1)
+    addImage(makeFile())
+    expect(images.value).toHaveLength(1)
+
+    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: makePost({ id: 2 }) })
+    await load(2)
+
+    expect(images.value).toHaveLength(0)
+    expect(imagePreviews.value).toHaveLength(0)
   })
 
   it('removeExistingImage: 指定したインデックスの既存画像を取り除く', async () => {
-    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: samplePost })
-    const { load, keepImageIds, keepImagePreviews, removeExistingImage } = usePostEdit(1)
-    await load()
+    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: makePost() })
+    const { load, keepImageIds, keepImagePreviews, removeExistingImage } = usePostEdit()
+    await load(1)
 
     removeExistingImage(0)
 
@@ -72,9 +105,9 @@ describe('usePostEdit', () => {
   })
 
   it('addImage/removeNewImage: 新規画像を追加・削除できる', async () => {
-    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: samplePost })
-    const { load, images, imagePreviews, addImage, removeNewImage } = usePostEdit(1)
-    await load()
+    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: makePost() })
+    const { load, images, imagePreviews, addImage, removeNewImage } = usePostEdit()
+    await load(1)
 
     const error = addImage(makeFile())
     expect(error).toBeNull()
@@ -87,9 +120,9 @@ describe('usePostEdit', () => {
   })
 
   it('addImage: 既存＋新規の合計で4枚を超えるとエラーを返す', async () => {
-    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: samplePost })
-    const { load, addImage } = usePostEdit(1)
-    await load() // 既存2枚
+    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: makePost() })
+    const { load, addImage } = usePostEdit()
+    await load(1) // 既存2枚
 
     addImage(makeFile('a.jpg'))
     addImage(makeFile('b.jpg'))
@@ -99,10 +132,10 @@ describe('usePostEdit', () => {
   })
 
   it('submit: bodyとkeep_image_ids・新規imagesをFormDataで送信する', async () => {
-    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: samplePost })
-    vi.mocked(apiClient.put).mockResolvedValueOnce({ data: { ...samplePost, body: '更新後' } })
-    const { load, body, removeExistingImage, addImage, submit } = usePostEdit(1)
-    await load()
+    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: makePost() })
+    vi.mocked(apiClient.put).mockResolvedValueOnce({ data: makePost({ body: '更新後' }) })
+    const { load, body, removeExistingImage, addImage, submit } = usePostEdit()
+    await load(1)
     body.value = '更新後'
     removeExistingImage(0) // id=10を除外、残り[11]
     addImage(makeFile('new.jpg'))
@@ -117,14 +150,23 @@ describe('usePostEdit', () => {
     expect(result?.body).toBe('更新後')
   })
 
+  it('submit: loadより前に呼ばれた場合は何もせずnullを返す', async () => {
+    const { submit } = usePostEdit()
+
+    const result = await submit()
+
+    expect(result).toBeNull()
+    expect(apiClient.put).not.toHaveBeenCalled()
+  })
+
   it('submit: 400バリデーションエラーはfieldErrorsに振り分けられる', async () => {
-    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: samplePost })
+    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: makePost() })
     vi.mocked(apiClient.put).mockRejectedValueOnce({
       isAxiosError: true,
       response: { status: 400, data: { body: ['この項目は必須です。'] } },
     })
-    const { load, submit, fieldErrors } = usePostEdit(1)
-    await load()
+    const { load, submit, fieldErrors } = usePostEdit()
+    await load(1)
 
     const result = await submit()
 

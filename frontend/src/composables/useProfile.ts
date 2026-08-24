@@ -18,6 +18,7 @@ export function useProfile() {
   async function load(userId: number) {
     loading.value = true
     error.value = false
+    deleteError.value = null
     try {
       const [profileRes, postsRes] = await Promise.all([
         apiClient.get<Profile>(`/api/users/${userId}`),

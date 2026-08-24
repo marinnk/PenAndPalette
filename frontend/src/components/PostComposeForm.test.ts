@@ -94,4 +94,17 @@ describe('PostComposeForm', () => {
 
     expect(screen.getByTestId('post-body-error')).toHaveTextContent('この項目は必須です。')
   })
+
+  it('fieldErrors.keep_image_idsを画像欄のエラーとして表示する（編集画面専用の項目）', () => {
+    render(PostComposeForm, {
+      props: baseProps({
+        mode: 'edit',
+        fieldErrors: { keep_image_ids: ['指定された画像がこの投稿に存在しません。'] },
+      }),
+    })
+
+    expect(screen.getByTestId('post-image-error')).toHaveTextContent(
+      '指定された画像がこの投稿に存在しません。',
+    )
+  })
 })

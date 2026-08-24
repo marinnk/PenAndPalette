@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import PostComposeForm from '@/components/PostComposeForm.vue'
 import { usePostEdit } from '@/composables/usePostEdit'
+import { MAX_IMAGES } from '@/composables/postImageValidation'
 
 // S04 投稿作成画面を編集モードで開いた場合（画面設計書169行目）
 const props = defineProps<{ id: string }>()
@@ -14,6 +15,7 @@ const {
   images,
   imagePreviews,
   loading,
+  loadError,
   submitting,
   errorMessage,
   fieldErrors,
@@ -22,11 +24,18 @@ const {
   removeExistingImage,
   removeNewImage,
   submit,
-} = usePostEdit(Number(props.id))
+} = usePostEdit()
 
 const imagePickError = ref<string | null>(null)
 
-onMounted(load)
+onMounted(() => load(Number(props.id)))
+// 同じルート（/posts/:id/edit）内で別の投稿idへ遷移した場合、Vue Routerはコンポーネント
+// インスタンスを使い回しonMountedが再実行されないため、idの変化を監視して再読み込みする
+// （PostDetailView.vue・ProfileView.vueと同じパターン）
+watch(
+  () => props.id,
+  (id) => load(Number(id)),
+)
 
 function onAddImage(file: File) {
   imagePickError.value = addImage(file)
@@ -54,12 +63,15 @@ async function handleSubmit() {
 
 <template>
   <p v-if="loading" data-testid="post-edit-loading">読み込み中...</p>
+  <p v-else-if="loadError" class="field-error" data-testid="post-edit-error">
+    投稿が見つかりませんでした。
+  </p>
   <PostComposeForm
     v-else
     mode="edit"
     :body="body"
     :image-previews="[...keepImagePreviews, ...imagePreviews]"
-    :can-add-more="keepImageIds.length + images.length < 4"
+    :can-add-more="keepImageIds.length + images.length < MAX_IMAGES"
     :submit-disabled="body.trim().length === 0 && keepImageIds.length === 0 && images.length === 0"
     :submitting="submitting"
     :error-message="errorMessage"
