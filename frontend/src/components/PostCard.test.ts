@@ -152,6 +152,20 @@ describe('PostCard', () => {
     expect(screen.getAllByRole('img')).toHaveLength(3)
   })
 
+  it('本文が画像より上に表示される（投稿詳細画面と同じ並び）', async () => {
+    const withImages = { ...post, images: ['https://example.com/1.jpg'] }
+    const { router } = renderPostCard({ post: withImages })
+    await router.isReady()
+
+    const card = screen.getByTestId('post-card-42')
+    const bodyEl = screen.getByText('本文です')
+    const imageEl = screen.getByRole('img')
+    const position = bodyEl.compareDocumentPosition(imageEl)
+    // Node.DOCUMENT_POSITION_FOLLOWING: bodyElより後（下）にimageElがあることを確認
+    expect(position & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(card).toContainElement(bodyEl)
+  })
+
   it('本文が空文字（画像のみ投稿）の場合は本文の段落を表示しない', async () => {
     const imageOnly = { ...post, body: '', images: ['https://example.com/1.jpg'] }
     const { router } = renderPostCard({ post: imageOnly })

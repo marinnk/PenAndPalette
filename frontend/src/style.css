@@ -603,8 +603,7 @@ code {
   flex-wrap: wrap;
 }
 
-.post-compose-image-slot,
-.post-compose-image-add {
+.post-compose-image-slot {
   position: relative;
   width: 84px;
   height: 84px;
@@ -637,15 +636,21 @@ code {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--text);
-  font-size: 13px;
+  align-self: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--accent-border);
+  border-radius: 50%;
+  color: var(--accent);
+  font-size: 22px;
+  line-height: 1;
   cursor: pointer;
   background: var(--bg);
 }
 
 .post-compose-image-add:hover {
-  border-color: var(--accent-border);
-  color: var(--accent);
+  background: var(--accent);
+  color: #fff;
 }
 
 .visually-hidden {

@@ -13,6 +13,7 @@ URL.createObjectURL = vi.fn(() => 'blob:mock-url')
 URL.revokeObjectURL = vi.fn()
 
 const PostDetailStub = { template: '<div>post-detail</div>' }
+const TimelineStub = { template: '<div>timeline</div>' }
 
 const existingPost = {
   id: 1,
@@ -29,15 +30,19 @@ const existingPost = {
   updated_at: '2026-08-23T00:00:00Z',
 }
 
-function renderPostEditView(id = '1') {
+// from: 編集画面を開く前にいた画面。router.back()で実際にそこへ戻ることを検証するため、
+// 先にその画面へ遷移してから編集画面へ遷移する（本物のナビゲーション履歴を作る）
+async function renderPostEditView(id = '1', from: 'timeline' | 'post-detail' = 'timeline') {
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
+      { path: '/', name: 'timeline', component: TimelineStub },
       { path: '/posts/:id/edit', name: 'post-edit', component: PostEditView, props: true },
       { path: '/posts/:id', name: 'post-detail', component: PostDetailStub, props: true },
     ],
   })
-  router.push({ name: 'post-edit', params: { id } })
+  await router.push({ name: from, params: from === 'post-detail' ? { id } : undefined })
+  await router.push({ name: 'post-edit', params: { id } })
   const result = render(PostEditView, { props: { id }, global: { plugins: [router] } })
   return { ...result, router }
 }
@@ -50,8 +55,7 @@ beforeEach(() => {
 describe('PostEditView', () => {
   it('マウント時に既存の投稿を読み込み、本文・画像が入力済みの状態で表示する', async () => {
     vi.mocked(apiClient.get).mockResolvedValueOnce({ data: existingPost })
-    const { router } = renderPostEditView()
-    await router.isReady()
+    await renderPostEditView()
 
     await waitFor(() => {
       expect(apiClient.get).toHaveBeenCalledWith('/api/posts/1')
@@ -62,8 +66,7 @@ describe('PostEditView', () => {
 
   it('見出し・送信ボタンが編集モードの文言になる（画面設計書169行目）', async () => {
     vi.mocked(apiClient.get).mockResolvedValueOnce({ data: existingPost })
-    const { router } = renderPostEditView()
-    await router.isReady()
+    await renderPostEditView()
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: '投稿を編集' })).toBeInTheDocument()
@@ -71,10 +74,9 @@ describe('PostEditView', () => {
     })
   })
 
-  it('保存成功時に投稿詳細画面へ遷移する', async () => {
+  it('保存成功時に遷移元の画面へ戻る（タイムラインから開いた場合）', async () => {
     vi.mocked(apiClient.get).mockResolvedValueOnce({ data: existingPost })
-    const { router } = renderPostEditView()
-    await router.isReady()
+    const { router } = await renderPostEditView('1', 'timeline')
     await waitFor(() => screen.getByTestId('post-compose-submit'))
 
     vi.mocked(apiClient.put).mockResolvedValueOnce({ data: { ...existingPost, body: '更新後' } })
@@ -83,21 +85,33 @@ describe('PostEditView', () => {
 
     await waitFor(() => {
       expect(apiClient.put).toHaveBeenCalledWith('/api/posts/1', expect.any(FormData))
+      expect(router.currentRoute.value.name).toBe('timeline')
+    })
+  })
+
+  it('保存成功時に遷移元の画面へ戻る（投稿詳細から開いた場合）', async () => {
+    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: existingPost })
+    const { router } = await renderPostEditView('1', 'post-detail')
+    await waitFor(() => screen.getByTestId('post-compose-submit'))
+
+    vi.mocked(apiClient.put).mockResolvedValueOnce({ data: { ...existingPost, body: '更新後' } })
+    await fireEvent.click(screen.getByTestId('post-compose-submit'))
+
+    await waitFor(() => {
       expect(router.currentRoute.value.name).toBe('post-detail')
       expect(router.currentRoute.value.params.id).toBe('1')
     })
   })
 
-  it('キャンセルで投稿詳細画面へ戻る', async () => {
+  it('キャンセルで遷移元の画面へ戻る', async () => {
     vi.mocked(apiClient.get).mockResolvedValueOnce({ data: existingPost })
-    const { router } = renderPostEditView()
-    await router.isReady()
+    const { router } = await renderPostEditView('1', 'timeline')
     await waitFor(() => screen.getByTestId('post-compose-cancel'))
 
     await fireEvent.click(screen.getByTestId('post-compose-cancel'))
 
     await waitFor(() => {
-      expect(router.currentRoute.value.name).toBe('post-detail')
+      expect(router.currentRoute.value.name).toBe('timeline')
     })
   })
 
@@ -106,7 +120,7 @@ describe('PostEditView', () => {
     // コンポーネントインスタンスを使い回すため、実際の挙動に合わせてidのprops変更を
     // rerenderで再現する（PostDetailView.test.tsと同じパターン）
     vi.mocked(apiClient.get).mockResolvedValueOnce({ data: existingPost })
-    const { rerender } = renderPostEditView()
+    const { rerender } = await renderPostEditView()
     await waitFor(() => expect(screen.getByTestId('post-body')).toHaveValue('編集前の本文'))
 
     vi.mocked(apiClient.get).mockResolvedValueOnce({
@@ -122,7 +136,7 @@ describe('PostEditView', () => {
 
   it('存在しない投稿を開くと、空フォームではなくエラーメッセージを表示する', async () => {
     vi.mocked(apiClient.get).mockRejectedValueOnce(new Error('not found'))
-    renderPostEditView()
+    await renderPostEditView()
 
     await waitFor(() => {
       expect(screen.getByTestId('post-edit-error')).toBeInTheDocument()
@@ -132,8 +146,7 @@ describe('PostEditView', () => {
 
   it('既存画像の削除ボタンでkeep_image_idsから除外される', async () => {
     vi.mocked(apiClient.get).mockResolvedValueOnce({ data: existingPost })
-    const { router } = renderPostEditView()
-    await router.isReady()
+    await renderPostEditView()
     await waitFor(() => screen.getByTestId('post-image-remove-0'))
 
     await fireEvent.click(screen.getByTestId('post-image-remove-0'))

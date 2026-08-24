@@ -54,9 +54,11 @@ function onRemoveImage(index: number) {
 async function handleSubmit() {
   const post = await submit()
   if (post) {
-    // 編集は複数画面（タイムライン・詳細・プロフィール）から開けるため、遷移元に戻すのではなく
-    // 常に編集した投稿自身の詳細画面へ遷移する（編集が反映されたことを利用者が確認しやすい）
-    router.push({ name: 'post-detail', params: { id: post.id } })
+    // 編集は複数画面（タイムライン・詳細・プロフィール）から開けるため、常に投稿詳細へ
+    // 遷移させるのではなく、実際に遷移してきた画面へそのまま戻る。編集画面へ遷移する際に
+    // 元の画面はアンマウントされ、戻った際に再マウント（onMounted）されるため、
+    // タイムライン・プロフィールに戻っても編集後の内容は再取得されて反映される
+    router.back()
   }
 }
 </script>
@@ -81,6 +83,6 @@ async function handleSubmit() {
     @add-image="onAddImage"
     @remove-image="onRemoveImage"
     @submit="handleSubmit"
-    @cancel="router.push({ name: 'post-detail', params: { id } })"
+    @cancel="router.back()"
   />
 </template>

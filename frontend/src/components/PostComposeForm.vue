@@ -62,7 +62,7 @@ function onFileSelected(event: Event) {
       </div>
 
       <div class="form-field">
-        <label>画像（任意・0〜4枚）</label>
+        <label>画像（4枚まで）</label>
         <div class="post-compose-images">
           <div v-for="(preview, i) in imagePreviews" :key="preview" class="post-compose-image-slot">
             <img :src="preview" :alt="`添付画像${i + 1}`" />
@@ -74,8 +74,13 @@ function onFileSelected(event: Event) {
               削除
             </button>
           </div>
-          <label v-if="canAddMore" class="post-compose-image-add" data-testid="post-image-add">
-            追加
+          <label
+            v-if="canAddMore"
+            class="post-compose-image-add"
+            data-testid="post-image-add"
+            aria-label="画像を追加"
+          >
+            ＋
             <input
               type="file"
               accept="image/jpeg,image/png"
