@@ -57,12 +57,27 @@ class UserSerializer(serializers.ModelSerializer):
         fields = ["id", "username", "display_name", "avatar_url"]
 
 
-class UserProfileSerializer(serializers.ModelSerializer):
-    """GET /api/users/{id} のレスポンス（基本設計書6.6章のプロフィール取得の暫定narrowing）。
+class UserProfileSerializer(serializers.Serializer):
+    """GET /api/users/{id} のレスポンス（基本設計書6.6章）。
 
-    follower_count・following_count・followed_by_meはF-7（フォロー機能）実装時に追加する。
+    posts.PostSerializerと同じ理由（モデルのフィールドとannotateされた属性が混在するため）で
+    ModelSerializerではなくSerializerを使う。follower_count・following_count・followed_by_meは、
+    呼び出し元（UserProfileView）がUser.objects.with_follow_stats(viewer)で付与した
+    annotate結果をそのまま読み出す。
     """
 
-    class Meta:
-        model = User
-        fields = ["id", "username", "display_name", "bio", "avatar_url"]
+    id = serializers.IntegerField(read_only=True)
+    username = serializers.CharField(read_only=True)
+    display_name = serializers.CharField(read_only=True)
+    bio = serializers.CharField(read_only=True)
+    avatar_url = serializers.CharField(read_only=True)
+    follower_count = serializers.IntegerField(read_only=True)
+    following_count = serializers.IntegerField(read_only=True)
+    followed_by_me = serializers.BooleanField(read_only=True)
+
+
+class FollowActionSerializer(serializers.Serializer):
+    """POST/DELETE /api/users/{id}/follow のレスポンス整形（基本設計書6.6章）。"""
+
+    followed_by_me = serializers.BooleanField(read_only=True)
+    follower_count = serializers.IntegerField(read_only=True)

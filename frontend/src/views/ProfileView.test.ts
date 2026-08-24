@@ -13,8 +13,18 @@ vi.mock('@/lib/apiClient', () => ({
 const TimelineStub = { template: '<div>timeline</div>' }
 const PostCreateStub = { template: '<div>post-create</div>' }
 const PostDetailStub = { template: '<div>post-detail</div>' }
+const FollowListStub = { template: '<div>follow-list</div>' }
 
-const profile = { id: 1, username: 'taro', display_name: '太郎', bio: 'よろしく', avatar_url: null }
+const profile = {
+  id: 1,
+  username: 'taro',
+  display_name: '太郎',
+  bio: 'よろしく',
+  avatar_url: null,
+  follower_count: 8,
+  following_count: 12,
+  followed_by_me: false,
+}
 
 function makePost(id: number) {
   return {
@@ -51,6 +61,8 @@ function renderProfileView(currentUserId: number) {
       { path: '/posts/new', name: 'post-create', component: PostCreateStub },
       { path: '/posts/:id', name: 'post-detail', component: PostDetailStub },
       { path: '/profile/:id', name: 'profile', component: ProfileView, props: true },
+      { path: '/profile/:id/following', name: 'profile-following', component: FollowListStub },
+      { path: '/profile/:id/followers', name: 'profile-followers', component: FollowListStub },
     ],
   })
   router.push({ name: 'profile', params: { id: '1' } })
@@ -127,6 +139,52 @@ describe('ProfileView', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('profile-error')).toBeInTheDocument()
+    })
+  })
+
+  it('フォロー中/フォロワー数を表示する', async () => {
+    vi.mocked(apiClient.get).mockImplementation((url: string) => {
+      if (url === '/api/users/1') return Promise.resolve({ data: profile })
+      return Promise.resolve({ data: { results: [], has_more: false } })
+    })
+    renderProfileView(999)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('profile-following-count')).toHaveTextContent('フォロー中 12')
+      expect(screen.getByTestId('profile-follower-count')).toHaveTextContent('フォロワー 8')
+    })
+  })
+
+  it('自分のプロフィールでは「フォローする」ボタンは表示されない', async () => {
+    vi.mocked(apiClient.get).mockImplementation((url: string) => {
+      if (url === '/api/users/1') return Promise.resolve({ data: profile })
+      return Promise.resolve({ data: { results: [], has_more: false } })
+    })
+    renderProfileView(1)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('profile-display-name')).toBeInTheDocument()
+    })
+    expect(screen.queryByTestId('profile-follow-button')).not.toBeInTheDocument()
+  })
+
+  it('他人のプロフィールで「フォローする」ボタンを押すとフォローし、表示が切り替わる', async () => {
+    vi.mocked(apiClient.get).mockImplementation((url: string) => {
+      if (url === '/api/users/1') return Promise.resolve({ data: profile })
+      return Promise.resolve({ data: { results: [], has_more: false } })
+    })
+    renderProfileView(999)
+    await waitFor(() => expect(screen.getByTestId('profile-follow-button')).toBeInTheDocument())
+
+    vi.mocked(apiClient.post).mockResolvedValueOnce({
+      data: { followed_by_me: true, follower_count: 9 },
+    })
+    await fireEvent.click(screen.getByTestId('profile-follow-button'))
+
+    await waitFor(() => {
+      expect(apiClient.post).toHaveBeenCalledWith('/api/users/1/follow')
+      expect(screen.getByTestId('profile-follow-button')).toHaveTextContent('フォロー中')
+      expect(screen.getByTestId('profile-follower-count')).toHaveTextContent('フォロワー 9')
     })
   })
 })

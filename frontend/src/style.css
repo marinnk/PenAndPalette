@@ -704,6 +704,70 @@ code {
   margin: 0 0 8px;
 }
 
+.profile-follow-counts {
+  display: flex;
+  gap: 16px;
+  margin: 0 0 12px;
+}
+
+.profile-follow-count {
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+
+/* S10 フォロー中／フォロワー一覧画面 */
+.follow-list {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 24px 16px 64px;
+}
+
+.follow-list > button {
+  display: block;
+  margin-bottom: 16px;
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+
+.follow-list-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.follow-list-tabs button {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  padding: 6px 16px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.follow-list-tabs button[aria-pressed='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.follow-list-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-h);
+  text-decoration: none;
+}
+
 .ticks {
   position: relative;
   width: 100%;

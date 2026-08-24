@@ -11,8 +11,9 @@ from users.cookies import (
     issue_auth_cookies,
     refresh_auth_cookies,
 )
-from users.models import InvalidRefreshToken, RefreshToken, User
+from users.models import Follow, InvalidRefreshToken, RefreshToken, User
 from users.serializers import (
+    FollowActionSerializer,
     LoginSerializer,
     RegisterSerializer,
     UserProfileSerializer,
@@ -117,5 +118,61 @@ class UserProfileView(APIView):
     """GET /api/users/{user_id} 指定した利用者のプロフィールを取得する（基本設計書6.6章）。"""
 
     def get(self, request, user_id):
-        user = get_object_or_404(User, pk=user_id)
+        user = get_object_or_404(User.objects.with_follow_stats(request.user), pk=user_id)
         return Response(UserProfileSerializer(user).data)
+
+
+def _reload_with_follow_stats(user_id, viewer):
+    """フォロー/フォロー解除の直後に最新のfollower_count等を1件だけ再取得する。"""
+    return User.objects.with_follow_stats(viewer).get(pk=user_id)
+
+
+class FollowView(APIView):
+    """POST/DELETE /api/users/{user_id}/follow フォロー/フォロー解除する（基本設計書6.6章）。
+
+    likes/wants（PostLikeView/PostWantView）と同じ、UNIQUE制約に対応する冪等な2エンドポイント。
+    自己フォローはfollowsテーブルのCHECK制約でも防がれるが、制約違反による500ではなく
+    わかりやすい400を返すため登録前にアプリケーション側でも判定する（基本設計書6.6章）。
+    """
+
+    def post(self, request, user_id):
+        target = get_object_or_404(User, pk=user_id)
+        if target.id == request.user.id:
+            return Response(
+                {"detail": "自分自身をフォローすることはできません。"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        Follow.objects.add(request.user, target)
+        return Response(
+            FollowActionSerializer(_reload_with_follow_stats(user_id, request.user)).data
+        )
+
+    def delete(self, request, user_id):
+        target = get_object_or_404(User, pk=user_id)
+        Follow.objects.remove(request.user, target)
+        return Response(
+            FollowActionSerializer(_reload_with_follow_stats(user_id, request.user)).data
+        )
+
+
+class FollowersListView(APIView):
+    """GET /api/users/{user_id}/followers 指定した利用者のフォロワー一覧を取得する。
+
+    学習規模のデータ量を前提にページネーションは設けない（基本設計書6.6・6.9章）。
+    """
+
+    def get(self, request, user_id):
+        get_object_or_404(User, pk=user_id)
+        followers = User.objects.filter(following__followee_id=user_id).order_by("-following__id")
+        return Response(UserSerializer(followers, many=True).data)
+
+
+class FollowingListView(APIView):
+    """GET /api/users/{user_id}/following 指定した利用者がフォロー中の利用者一覧を取得する
+    （基本設計書6.6章）。
+    """
+
+    def get(self, request, user_id):
+        get_object_or_404(User, pk=user_id)
+        following = User.objects.filter(followers__follower_id=user_id).order_by("-followers__id")
+        return Response(UserSerializer(following, many=True).data)
