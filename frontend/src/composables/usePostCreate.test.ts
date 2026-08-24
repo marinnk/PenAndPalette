@@ -73,6 +73,23 @@ describe('usePostCreate', () => {
     expect(errorMessage.value).toBeNull()
   })
 
+  it('submit: non_field_errors（本文または画像が必要等）はerrorMessageに表示される', async () => {
+    vi.mocked(apiClient.post).mockRejectedValueOnce({
+      isAxiosError: true,
+      response: {
+        status: 400,
+        data: { non_field_errors: ['本文または画像のいずれかを入力してください。'] },
+      },
+    })
+
+    const { submit, fieldErrors, errorMessage } = usePostCreate()
+    const result = await submit()
+
+    expect(result).toBeNull()
+    expect(fieldErrors.value).toEqual({})
+    expect(errorMessage.value).toBe('本文または画像のいずれかを入力してください。')
+  })
+
   it('submit中はsubmittingがtrueになる', async () => {
     let resolvePost: (value: unknown) => void = () => {}
     vi.mocked(apiClient.post).mockImplementationOnce(

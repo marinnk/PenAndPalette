@@ -5,7 +5,11 @@ from django.core.files.storage import default_storage
 from rest_framework import serializers
 
 # 基本設計書5章: 画像アップロードはjpg/png・1枚あたり5MBまで
-# （投稿画像・コメント画像・アイコン画像で共通のルール）
+# （投稿画像・コメント画像・アイコン画像で共通のルール）。添付できる枚数の上限は機能ごとに異なる
+# （投稿は0〜4枚、コメント・アバターは1枚まで）ため、ここには含めずposts/serializers.py側に置く
+#
+# frontend/src/composables/usePostCreate.ts が MAX_IMAGE_SIZE_BYTES・ALLOWED_IMAGE_TYPESという
+# 名前でこの2つの値を複製している。値を変更する場合は両方合わせて変更すること
 MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024
 ALLOWED_CONTENT_TYPES = {"image/jpeg": ".jpg", "image/png": ".png"}
 

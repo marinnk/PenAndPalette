@@ -1,8 +1,14 @@
 import { onUnmounted, ref } from 'vue'
 import { apiClient } from '@/lib/apiClient'
-import { extractDetail, extractFieldErrors } from '@/lib/apiError'
+import { extractDetail, extractFieldErrors, extractNonFieldError } from '@/lib/apiError'
 import type { Post } from '@/types/post'
 
+// 以下3つの定数は、バックエンドの検証ルールをクライアント側にも複製したもの（言語が異なるため
+// 実行時に1つの定義を共有することはできない）。値を変更する場合は対応するバックエンド側も
+// 必ず合わせて変更すること：
+//   MAX_IMAGES          → backend/posts/serializers.py の PostCreateSerializer.MAX_IMAGES
+//   MAX_IMAGE_SIZE_BYTES → backend/common/storage.py の MAX_IMAGE_SIZE_BYTES
+//   ALLOWED_IMAGE_TYPES  → backend/common/storage.py の ALLOWED_CONTENT_TYPES
 const MAX_IMAGES = 4
 const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png']
@@ -57,7 +63,9 @@ export function usePostCreate() {
     } catch (err) {
       fieldErrors.value = extractFieldErrors(err)
       if (Object.keys(fieldErrors.value).length === 0) {
-        errorMessage.value = extractDetail(err) ?? '投稿に失敗しました。'
+        // 「本文または画像のいずれかを入力してください」のような、特定の入力欄に紐付かない
+        // バリデーションエラー（non_field_errors）を優先して表示する
+        errorMessage.value = extractNonFieldError(err) ?? extractDetail(err) ?? '投稿に失敗しました。'
       }
       return null
     } finally {

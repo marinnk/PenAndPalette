@@ -1,3 +1,4 @@
+from django.db import transaction
 from rest_framework import serializers
 
 from common.storage import upload_image, validate_image_file
@@ -65,6 +66,8 @@ class PostCreateSerializer(serializers.Serializer):
     multipart/form-data。body（0〜280文字）・images（0〜4枚）の少なくとも一方が必須。
     """
 
+    # frontend/src/composables/usePostCreate.ts のMAX_IMAGESがこの値を複製している。
+    # 値を変更する場合は両方合わせて変更すること
     MAX_IMAGES = 4
 
     body = serializers.CharField(
@@ -84,18 +87,27 @@ class PostCreateSerializer(serializers.Serializer):
             raise serializers.ValidationError("本文または画像のいずれかを入力してください。")
         return attrs
 
+    @transaction.atomic
     def create(self, validated_data):
+        # transaction.atomic: 画像のアップロード中（S3/MinIOへの書き込み）に失敗した場合、
+        # ここまでに作成したPost・PostImageのDB行を1件も残さずロールバックする。
+        # ただし既にS3/MinIOへ書き込み済みのファイル自体はDBの取り消しでは削除されない
+        # （アップロード先はDBトランザクションの対象外のため）。取りこぼした投稿が
+        # 一覧に見えてしまう不整合は防げるが、孤立したファイルの後始末は今回のスコープ外とする
         post = Post.objects.create(
             user=self.context["request"].user, body=validated_data["body"] or None
         )
-        # 作成直後のシリアライズ（PostSerializer.get_images）で再クエリしなくて済むよう、
-        # 作成したPostImageのリストをその場でPostインスタンスに持たせておく
-        post._created_images = [
-            PostImage.objects.create(
+        images = [
+            PostImage(
                 post=post, image_url=upload_image(image, folder="posts"), display_order=order
             )
             for order, image in enumerate(validated_data["images"])
         ]
+        # 画像1枚ごとにINSERTするのではなく、まとめて1回のクエリで保存する
+        PostImage.objects.bulk_create(images)
+        # 作成直後のシリアライズ（PostSerializer.get_images）で再クエリしなくて済むよう、
+        # 作成したPostImageのリストをその場でPostインスタンスに持たせておく
+        post._created_images = images
         return post
 
 

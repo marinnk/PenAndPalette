@@ -62,7 +62,7 @@ async function handleSubmit() {
       </div>
 
       <div class="form-field">
-        <label>画像（任意・1〜4枚）</label>
+        <label>画像（任意・0〜4枚）</label>
         <div class="post-compose-images">
           <div
             v-for="(preview, i) in imagePreviews"

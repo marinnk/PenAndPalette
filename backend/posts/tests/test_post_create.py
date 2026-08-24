@@ -1,8 +1,10 @@
+from unittest.mock import patch
+
 from django.core.files.uploadedfile import SimpleUploadedFile
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from posts.models import PostImage
+from posts.models import Post, PostImage
 from users.tests.conftest import DEFAULT_PASSWORD, create_user
 
 
@@ -147,3 +149,28 @@ class PostCreateTests(APITestCase):
             .values_list("image_url", flat=True)
         )
         self.assertEqual(urls_in_order, response.json()["images"])
+
+    def test_create_rolls_back_post_and_images_when_upload_fails_midway(self):
+        """2枚目の画像アップロードが失敗した場合、1枚目の画像もPost自体もDBに
+        残らないこと（transaction.atomicによるロールバック）を確認する。
+        """
+        self._login()
+        posts_before = Post.objects.count()
+        # ビュー内で送出された例外をpytestまで伝播させず、通常のHTTPレスポンス（500）として
+        # 受け取れるようにする
+        self.client.raise_request_exception = False
+
+        with patch(
+            "posts.serializers.upload_image", side_effect=["https://example.com/1.jpg", OSError]
+        ):
+            response = self.client.post(
+                self.url,
+                {"body": "アップロード失敗", "images": [make_image("a.jpg"), make_image("b.jpg")]},
+                format="multipart",
+            )
+
+        self.assertEqual(response.status_code, status.HTTP_500_INTERNAL_SERVER_ERROR)
+        self.assertEqual(Post.objects.count(), posts_before)
+        self.assertEqual(
+            PostImage.objects.filter(image_url="https://example.com/1.jpg").count(), 0
+        )
