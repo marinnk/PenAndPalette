@@ -39,9 +39,13 @@ class PostDetailTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_detail_returns_image_urls(self):
-        create_post_image(self.post, image_url="https://example.com/detail.jpg", display_order=0)
+        image = create_post_image(
+            self.post, image_url="https://example.com/detail.jpg", display_order=0
+        )
         self._login()
 
         response = self.client.get(f"/api/posts/{self.post.id}")
 
-        self.assertEqual(response.json()["images"], ["https://example.com/detail.jpg"])
+        body = response.json()
+        self.assertEqual(body["images"], ["https://example.com/detail.jpg"])
+        self.assertEqual(body["image_ids"], [image.id])

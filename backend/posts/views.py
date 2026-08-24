@@ -1,14 +1,18 @@
 from django.shortcuts import get_object_or_404
 from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from common.permissions import IsOwner
+from common.storage import delete_image
 from posts.models import Like, Post, Want
 from posts.serializers import (
     LikeReactionSerializer,
     PostCreateSerializer,
     PostListQuerySerializer,
     PostSerializer,
+    PostUpdateSerializer,
     WantReactionSerializer,
 )
 
@@ -39,13 +43,45 @@ class PostListCreateView(APIView):
 
 class PostDetailView(APIView):
     """GET /api/posts/{post_id} 投稿の詳細を取得する。
+    PUT /api/posts/{post_id} 自分の投稿を編集する。
+    DELETE /api/posts/{post_id} 自分の投稿を削除する（基本設計書6.3章）。
 
-    編集・削除（PUT/DELETE）は今回のスコープ外（投稿編集Issueで追加する）。
+    permission_classesはPUT/DELETEでのみ意味を持つ。IsOwner.has_permission（未オーバーライド）
+    はデフォルトTrueのため、GETの挙動（IsAuthenticatedのみ）は変わらない。本プロジェクトは
+    APIViewでget_object()を持たないため、IsOwnerのオブジェクトレベル判定は各メソッドから
+    check_object_permissions()を明示的に呼んで実行する。
     """
+
+    permission_classes = [IsAuthenticated, IsOwner]
 
     def get(self, request, post_id):
         post = get_object_or_404(Post.objects.with_reactions(request.user), pk=post_id)
         return Response(PostSerializer(post).data)
+
+    def put(self, request, post_id):
+        post = get_object_or_404(Post, pk=post_id)
+        self.check_object_permissions(request, post)
+        serializer = PostUpdateSerializer(post, data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        post = serializer.save()
+        # S3の実削除はDBコミット確定後に行う（PostUpdateSerializer.updateのコメント参照）
+        for url in post._removed_image_urls:
+            delete_image(url)
+        post = _reload_with_reactions(post.id, request.user)
+        return Response(PostSerializer(post).data)
+
+    def delete(self, request, post_id):
+        post = get_object_or_404(Post, pk=post_id)
+        self.check_object_permissions(request, post)
+        # post.delete()の前にURLを収集しておく必要がある（削除後はpost.imagesを辿れない）
+        image_urls = list(post.images.values_list("image_url", flat=True))
+        # comments・likes・wants・post_imagesはON DELETE CASCADEで自動的に削除される。
+        # ただしS3上の実ファイルはCASCADEでは消えないため、
+        # 下でアプリケーション側から明示的に削除する
+        post.delete()
+        for url in image_urls:
+            delete_image(url)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 def _reload_with_reactions(post_id, viewer):
