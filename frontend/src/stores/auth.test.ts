@@ -26,14 +26,48 @@ describe('useAuthStore', () => {
     expect(auth.isCheckingSession).toBe(false)
   })
 
-  it('fetchMe: 失敗したらcurrentUserはnullのまま', async () => {
-    vi.mocked(apiClient.get).mockRejectedValueOnce(new Error('unauthorized'))
+  it('fetchMe: 未ログイン(401)の場合はcurrentUserがnullになり確認完了とする', async () => {
+    vi.mocked(apiClient.get).mockRejectedValueOnce({
+      isAxiosError: true,
+      response: { status: 401, data: { detail: 'unauthorized' } },
+    })
 
     const auth = useAuthStore()
     await auth.fetchMe()
 
     expect(auth.currentUser).toBeNull()
     expect(auth.isCheckingSession).toBe(false)
+  })
+
+  it('fetchMe: レスポンスの無い一時的な失敗はisCheckingSessionをtrueのままにし再試行できるようにする', async () => {
+    vi.mocked(apiClient.get).mockRejectedValueOnce(new Error('network error'))
+
+    const auth = useAuthStore()
+    await auth.fetchMe()
+
+    expect(auth.currentUser).toBeNull()
+    // ここでfalseにしてしまうと、一時的なネットワーク不調1回だけで
+    // アプリ全体が永久にログイン画面へ固定されてしまう
+    expect(auth.isCheckingSession).toBe(true)
+  })
+
+  it('fetchMe: 同時に呼ばれてもリクエストは1回にまとめられる', async () => {
+    let resolveGet: (value: unknown) => void = () => {}
+    vi.mocked(apiClient.get).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveGet = resolve
+        }),
+    )
+
+    const auth = useAuthStore()
+    const first = auth.fetchMe()
+    const second = auth.fetchMe()
+    resolveGet({ data: user })
+    await Promise.all([first, second])
+
+    expect(apiClient.get).toHaveBeenCalledTimes(1)
+    expect(auth.currentUser).toEqual(user)
   })
 
   it('login: 成功したらcurrentUserが更新される', async () => {

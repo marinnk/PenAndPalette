@@ -51,7 +51,7 @@ async function handleSubmit() {
         <button
           type="submit"
           class="form-submit"
-          :disabled="submitting || body.length === 0"
+          :disabled="submitting || body.trim().length === 0"
           data-testid="post-create-submit"
         >
           投稿する

@@ -16,6 +16,8 @@ const {
   error,
   scope,
   newPostCount,
+  reactionError,
+  isPending,
   load,
   loadMore,
   revealNewPosts,
@@ -70,6 +72,9 @@ watch(scope, (newScope) => {
       >
         投稿する
       </button>
+      <p v-if="reactionError" class="field-error" data-testid="reaction-error">
+        {{ reactionError }}
+      </p>
       <NewPostBanner :count="newPostCount" @reveal="handleReveal" />
       <TimelineTabs v-model="scope" />
 
@@ -85,6 +90,7 @@ watch(scope, (newScope) => {
           v-for="post in posts"
           :key="post.id"
           :post="post"
+          :pending="isPending(post.id)"
           @toggle-like="toggleLike"
           @toggle-want="toggleWant"
         />

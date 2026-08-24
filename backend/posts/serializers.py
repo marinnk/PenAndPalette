@@ -34,6 +34,20 @@ class PostSerializer(serializers.Serializer):
         return 0
 
 
+class LikeReactionSerializer(serializers.Serializer):
+    """POST/DELETE /api/posts/{id}/likes のレスポンス整形（基本設計書6.5章）。"""
+
+    like_count = serializers.IntegerField(read_only=True)
+    liked_by_me = serializers.BooleanField(read_only=True)
+
+
+class WantReactionSerializer(serializers.Serializer):
+    """POST/DELETE /api/posts/{id}/wants のレスポンス整形（基本設計書6.5章）。"""
+
+    want_count = serializers.IntegerField(read_only=True)
+    wanted_by_me = serializers.BooleanField(read_only=True)
+
+
 class PostCreateSerializer(serializers.Serializer):
     """POST /api/posts のリクエストボディ検証・投稿作成を担う。
 
@@ -52,7 +66,12 @@ class PostListQuerySerializer(serializers.Serializer):
 
     limit = serializers.IntegerField(required=False, min_value=1, max_value=50, default=20)
     before_id = serializers.IntegerField(required=False, min_value=1)
-    after_id = serializers.IntegerField(required=False, min_value=1)
+    # after_idはmin_value=0（他はmin_value=1）：フロントエンドはタイムラインが空の状態を
+    # after_id=0（＝「これより新しい投稿」の下限なし）として表現し、特別分岐なしで
+    # ポーリングできるようにしている（frontend/src/composables/useTimeline.ts参照）。
+    # min_value=1のままだと、投稿が1件も無い利用者のポーリングが常に400になり、
+    # 新着通知バナーが永久に表示されなくなる
+    after_id = serializers.IntegerField(required=False, min_value=0)
     user_id = serializers.IntegerField(required=False, min_value=1)
     scope = serializers.ChoiceField(choices=["all", "following"], required=False)
 

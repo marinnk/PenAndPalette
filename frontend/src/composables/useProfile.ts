@@ -1,6 +1,6 @@
 import { ref } from 'vue'
 import { apiClient } from '@/lib/apiClient'
-import { setLiked, setWanted } from '@/composables/usePostReactions'
+import { useReactablePosts } from '@/composables/usePostReactions'
 import type { Post, PostListResponse } from '@/types/post'
 import type { Profile } from '@/types/profile'
 
@@ -10,6 +10,8 @@ export function useProfile() {
   const posts = ref<Post[]>([])
   const loading = ref(false)
   const error = ref(false)
+
+  const { reactionError, isPending, toggleLike, toggleWant } = useReactablePosts(posts)
 
   async function load(userId: number) {
     loading.value = true
@@ -28,20 +30,5 @@ export function useProfile() {
     }
   }
 
-  function applyReaction(postId: number, patch: Partial<Post>) {
-    const target = posts.value.find((p) => p.id === postId)
-    if (target) Object.assign(target, patch)
-  }
-
-  async function toggleLike(post: Post) {
-    const patch = await setLiked(post.id, !post.liked_by_me)
-    applyReaction(post.id, patch)
-  }
-
-  async function toggleWant(post: Post) {
-    const patch = await setWanted(post.id, !post.wanted_by_me)
-    applyReaction(post.id, patch)
-  }
-
-  return { profile, posts, loading, error, load, toggleLike, toggleWant }
+  return { profile, posts, loading, error, reactionError, isPending, load, toggleLike, toggleWant }
 }

@@ -56,6 +56,14 @@ describe('PostCreateView', () => {
     expect(screen.getByTestId('post-create-submit')).toBeDisabled()
   })
 
+  it('本文が空白のみのときも投稿ボタンがdisabledになる（バックエンドのtrim検証と一致させる）', async () => {
+    renderPostCreateView()
+
+    await fireEvent.update(screen.getByTestId('post-body'), '   ')
+
+    expect(screen.getByTestId('post-create-submit')).toBeDisabled()
+  })
+
   it('キャンセルでタイムラインへ戻る', async () => {
     const { router } = renderPostCreateView()
     await router.isReady()

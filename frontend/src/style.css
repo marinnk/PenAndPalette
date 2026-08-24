@@ -497,6 +497,15 @@ code {
   font-weight: 500;
 }
 
+.post-card-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.post-card-static {
+  cursor: default;
+}
+
 .post-card-comment-count {
   color: var(--text);
 }

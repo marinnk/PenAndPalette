@@ -22,7 +22,7 @@ const post: Post = {
   updated_at: '2026-08-20T00:00:00Z',
 }
 
-function renderPostCard() {
+function renderPostCard(props: Record<string, unknown> = {}) {
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
@@ -31,7 +31,7 @@ function renderPostCard() {
       { path: '/profile/:id', name: 'profile', component: ProfileStub },
     ],
   })
-  const result = render(PostCard, { props: { post }, global: { plugins: [router] } })
+  const result = render(PostCard, { props: { post, ...props }, global: { plugins: [router] } })
   return { ...result, router }
 }
 
@@ -90,5 +90,23 @@ describe('PostCard', () => {
 
     expect(emitted()['toggle-want']).toEqual([[post]])
     expect(router.currentRoute.value.name).toBe('timeline')
+  })
+
+  it('clickable=falseの場合はカード本体をクリックしても遷移しない（投稿詳細画面用）', async () => {
+    const { router } = renderPostCard({ clickable: false })
+    await router.isReady()
+
+    await fireEvent.click(screen.getByTestId('post-card-42'))
+
+    expect(router.currentRoute.value.name).toBe('timeline')
+    expect(screen.getByTestId('post-card-42')).not.toHaveAttribute('role')
+  })
+
+  it('pending=trueの場合はいいね/かきたいボタンが無効化される', async () => {
+    const { router } = renderPostCard({ pending: true })
+    await router.isReady()
+
+    expect(screen.getByTestId('like-button-42')).toBeDisabled()
+    expect(screen.getByTestId('want-button-42')).toBeDisabled()
   })
 })

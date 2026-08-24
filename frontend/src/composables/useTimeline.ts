@@ -1,6 +1,6 @@
 import { ref } from 'vue'
 import { apiClient } from '@/lib/apiClient'
-import { setLiked, setWanted } from '@/composables/usePostReactions'
+import { useReactablePosts } from '@/composables/usePostReactions'
 import type { Post, PostListResponse, TimelineScope } from '@/types/post'
 
 const POLL_INTERVAL_MS = 30_000
@@ -19,9 +19,11 @@ export function useTimeline() {
   // バナーに表示する新着件数。反映（revealNewPosts）されるまで一覧には混ぜない
   const newPostCount = ref(0)
 
+  const { reactionError, isPending, toggleLike, toggleWant } = useReactablePosts(posts)
+
   let pendingNewPosts: Post[] = []
   // ポーリングの基準id。0は「まだ投稿が無い」を表し、after_id=0は全件取得と等価になるため
-  // 空のタイムラインでも特別分岐なしで動く
+  // 空のタイムラインでも特別分岐なしで動く（バックエンド側もafter_id=0を受け付ける）
   let pollAnchorId = 0
   let pollTimer: ReturnType<typeof setInterval> | null = null
 
@@ -79,9 +81,14 @@ export function useTimeline() {
   async function loadMore() {
     if (!hasMore.value || loadingMore.value || posts.value.length === 0) return
     loadingMore.value = true
+    // 取得中にタブ（scope）が切り替わっていないかを判定するため、リクエスト時点のscopeを保持する
+    const requestScope = scope.value
     try {
       const lastId = posts.value[posts.value.length - 1].id
-      const data = await fetchPosts({ scope: scope.value, before_id: lastId, limit: PAGE_SIZE })
+      const data = await fetchPosts({ scope: requestScope, before_id: lastId, limit: PAGE_SIZE })
+      // 応答が返ってくるまでの間にタブが切り替わっていたら、古いscopeの結果は捨てる
+      // （捨てないと、切替後の一覧に古いタブの投稿が紛れ込む）
+      if (requestScope !== scope.value) return
       posts.value = [...posts.value, ...data.results]
       hasMore.value = data.has_more
     } finally {
@@ -95,21 +102,6 @@ export function useTimeline() {
     newPostCount.value = 0
   }
 
-  function applyReaction(postId: number, patch: Partial<Post>) {
-    const target = posts.value.find((p) => p.id === postId)
-    if (target) Object.assign(target, patch)
-  }
-
-  async function toggleLike(post: Post) {
-    const patch = await setLiked(post.id, !post.liked_by_me)
-    applyReaction(post.id, patch)
-  }
-
-  async function toggleWant(post: Post) {
-    const patch = await setWanted(post.id, !post.wanted_by_me)
-    applyReaction(post.id, patch)
-  }
-
   return {
     posts,
     hasMore,
@@ -118,6 +110,8 @@ export function useTimeline() {
     error,
     scope,
     newPostCount,
+    reactionError,
+    isPending,
     load,
     loadMore,
     revealNewPosts,

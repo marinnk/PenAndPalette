@@ -3,9 +3,14 @@ import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import type { Post } from '@/types/post'
 
-// S03/S07で共通利用する投稿カード（画面設計書126〜133行目）。
-// いいね/かきたいのAPI呼び出しは持たず、親（TimelineView等）にemitで委ねる
-const props = defineProps<{ post: Post }>()
+// S03/S05/S07で共通利用する投稿カード（画面設計書126〜133行目）。
+// いいね/かきたいのAPI呼び出しは持たず、親（TimelineView等）にemitで委ねる。
+// clickable=falseは投稿詳細画面（自分自身への遷移を避けるため）向け、
+// pending=trueはいいね/かきたいの処理中に連打で二重送信させないためのもの
+const props = withDefaults(defineProps<{ post: Post; clickable?: boolean; pending?: boolean }>(), {
+  clickable: true,
+  pending: false,
+})
 const emit = defineEmits<{ 'toggle-like': [post: Post]; 'toggle-want': [post: Post] }>()
 
 const router = useRouter()
@@ -13,6 +18,7 @@ const router = useRouter()
 const formattedDate = computed(() => props.post.created_at.slice(0, 10))
 
 function goToDetail() {
+  if (!props.clickable) return
   router.push({ name: 'post-detail', params: { id: props.post.id } })
 }
 </script>
@@ -20,9 +26,10 @@ function goToDetail() {
 <template>
   <article
     class="post-card"
+    :class="{ 'post-card-static': !clickable }"
     :data-testid="`post-card-${post.id}`"
-    role="button"
-    tabindex="0"
+    :role="clickable ? 'button' : undefined"
+    :tabindex="clickable ? 0 : undefined"
     @click="goToDetail"
     @keydown.enter="goToDetail"
   >
@@ -42,6 +49,7 @@ function goToDetail() {
       <button
         type="button"
         :class="{ active: post.liked_by_me }"
+        :disabled="pending"
         :data-testid="`like-button-${post.id}`"
         @click.stop="emit('toggle-like', post)"
       >
@@ -50,6 +58,7 @@ function goToDetail() {
       <button
         type="button"
         :class="{ active: post.wanted_by_me }"
+        :disabled="pending"
         :data-testid="`want-button-${post.id}`"
         @click.stop="emit('toggle-want', post)"
       >

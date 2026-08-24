@@ -148,6 +148,52 @@ describe('useTimeline', () => {
     expect(vi.mocked(apiClient.get).mock.calls.length).toBe(callCountBefore)
   })
 
+  it('loadMore(): 応答待ちの間にタブが切り替わった場合、古いscopeの結果は捨てる', async () => {
+    vi.mocked(apiClient.get).mockResolvedValueOnce({
+      data: { results: [makePost(2), makePost(1)], has_more: true },
+    })
+    const timeline = useTimeline()
+    await timeline.load('all')
+
+    // loadMore()（全体タブ）の応答が返る前にフォロー中タブへ切り替える
+    let resolveLoadMore: (value: unknown) => void = () => {}
+    vi.mocked(apiClient.get).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveLoadMore = resolve
+        }),
+    )
+    const loadMorePromise = timeline.loadMore()
+
+    vi.mocked(apiClient.get).mockResolvedValueOnce({
+      data: { results: [makePost(9)], has_more: false },
+    })
+    await timeline.load('following')
+
+    // 遅れて全体タブのloadMore()の応答が返ってきても、フォロー中タブの一覧には混ざらない
+    resolveLoadMore({ data: { results: [makePost(0)], has_more: false } })
+    await loadMorePromise
+
+    expect(timeline.posts.value.map((p) => p.id)).toEqual([9])
+    timeline.stopPolling()
+  })
+
+  it('toggleLike(): 失敗時はreactionErrorにメッセージを設定する', async () => {
+    vi.mocked(apiClient.get).mockResolvedValueOnce({
+      data: { results: [makePost(1)], has_more: false },
+    })
+    const timeline = useTimeline()
+    await timeline.load()
+
+    vi.mocked(apiClient.post).mockRejectedValueOnce(new Error('network error'))
+    await timeline.toggleLike(timeline.posts.value[0])
+
+    expect(timeline.reactionError.value).toBe(
+      'いいねの更新に失敗しました。もう一度お試しください。',
+    )
+    timeline.stopPolling()
+  })
+
   it('toggleLike(): APIの結果を該当投稿にのみ反映する', async () => {
     vi.mocked(apiClient.get).mockResolvedValueOnce({
       data: { results: [makePost(1), makePost(2)], has_more: false },

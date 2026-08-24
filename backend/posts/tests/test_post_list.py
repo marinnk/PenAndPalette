@@ -85,6 +85,20 @@ class PostListTests(APITestCase):
         ids = [row["id"] for row in response.json()["results"]]
         self.assertEqual(ids, [p2.id])
 
+    def test_after_id_zero_returns_all_posts_instead_of_400(self):
+        """after_id=0はフロントエンドのポーリングが「まだ投稿を1件も知らない」ことを表す
+        ために使う値（useTimeline.ts参照）。空のタイムラインでもポーリングが400にならず、
+        全件を取得できることを確認する。
+        """
+        self._login()
+        post = create_post(self.user, body="1件目")
+
+        response = self.client.get(self.url, {"after_id": 0})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        ids = [row["id"] for row in response.json()["results"]]
+        self.assertEqual(ids, [post.id])
+
     def test_before_id_and_after_id_together_returns_400(self):
         self._login()
 
