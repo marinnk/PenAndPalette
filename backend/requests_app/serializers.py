@@ -19,7 +19,14 @@ class RequestCreateSerializer(serializers.Serializer):
     related_post_id = serializers.IntegerField(required=False, allow_null=True)
 
     def validate_related_post_id(self, value):
-        if value is not None and not Post.objects.filter(pk=value).exists():
+        if value is None:
+            return value
+        # 参考にしてほしい投稿は「自分・相手どちらの投稿でもよい」（F-6機能仕様4.1節）ため、
+        # 送信者・宛先いずれの投稿でもない投稿idは指定できないようにする
+        # （フロントエンドのpickerも自分・宛先の投稿しか一覧に出さない）
+        from_user = self.context["request"].user
+        to_user = self.context["to_user"]
+        if not Post.objects.filter(pk=value, user__in=[from_user, to_user]).exists():
             raise serializers.ValidationError("指定された投稿が見つかりません。")
         return value
 

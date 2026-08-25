@@ -12,7 +12,9 @@ class RequestManager(models.Manager):
         FollowersListViewと同方針）。
         """
         return (
-            self.filter(to_user=user).select_related("from_user", "related_post").order_by("-id")
+            self.filter(to_user=user)
+            .select_related("from_user", "related_post", "related_post__user")
+            .order_by("-id")
         )
 
 

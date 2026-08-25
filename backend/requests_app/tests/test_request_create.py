@@ -48,7 +48,7 @@ class RequestCreateTests(APITestCase):
             Request.objects.filter(from_user=self.sender, to_user=self.recipient).exists()
         )
 
-    def test_create_with_related_post_returns_embedded_summary(self):
+    def test_create_with_recipient_post_returns_embedded_summary(self):
         self._login()
         post = create_post(self.recipient, body="参考にしてほしい投稿")
 
@@ -60,6 +60,33 @@ class RequestCreateTests(APITestCase):
         related_post = response.json()["related_post"]
         self.assertEqual(related_post["id"], post.id)
         self.assertEqual(related_post["body"], "参考にしてほしい投稿")
+
+    def test_create_with_own_post_returns_embedded_summary(self):
+        # 参考にしてほしい投稿は「自分・相手どちらの投稿でもよい」（F-6機能仕様4.1節）
+        self._login()
+        post = create_post(self.sender, body="自分の投稿")
+
+        response = self.client.post(
+            self.url, {"message": "この投稿の続きを書いてほしいです", "related_post_id": post.id}
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.json()["related_post"]["id"], post.id)
+
+    def test_related_post_belonging_to_unrelated_user_returns_400(self):
+        # 送信者・宛先のどちらでもない第三者の投稿は参考投稿として指定できない
+        self._login()
+        unrelated_user = create_user(
+            username="unrelated", email="unrelated@example.com", display_name="Unrelated"
+        )
+        post = create_post(unrelated_user, body="無関係な投稿")
+
+        response = self.client.post(
+            self.url, {"message": "無関係な投稿を指定", "related_post_id": post.id}
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("related_post_id", response.json())
 
     def test_self_request_returns_400(self):
         self._login()
