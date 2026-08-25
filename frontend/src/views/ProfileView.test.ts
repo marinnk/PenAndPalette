@@ -15,6 +15,7 @@ const PostCreateStub = { template: '<div>post-create</div>' }
 const PostDetailStub = { template: '<div>post-detail</div>' }
 const FollowListStub = { template: '<div>follow-list</div>' }
 const RequestCreateStub = { template: '<div>request-create</div>' }
+const ProfileEditStub = { template: '<div>profile-edit</div>' }
 
 const profile = {
   id: 1,
@@ -74,6 +75,7 @@ function renderProfileView(currentUserId: number) {
       { path: '/posts/new', name: 'post-create', component: PostCreateStub },
       { path: '/posts/:id', name: 'post-detail', component: PostDetailStub },
       { path: '/profile/:id', name: 'profile', component: ProfileView, props: true },
+      { path: '/profile/:id/edit', name: 'profile-edit', component: ProfileEditStub },
       {
         path: '/profile/:id/requests/new',
         name: 'request-create',
@@ -110,6 +112,47 @@ describe('ProfileView', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('profile-compose-button')).toBeInTheDocument()
+    })
+  })
+
+  it('自分のプロフィールでは「プロフィールを編集」ボタンが表示され、押すとS08へ遷移する', async () => {
+    mockApiClient()
+    const { router } = renderProfileView(1)
+    await waitFor(() => expect(screen.getByTestId('profile-edit-button')).toBeInTheDocument())
+
+    await fireEvent.click(screen.getByTestId('profile-edit-button'))
+
+    await waitFor(() => {
+      expect(router.currentRoute.value.name).toBe('profile-edit')
+      expect(router.currentRoute.value.params.id).toBe('1')
+    })
+  })
+
+  it('他人のプロフィールでは「プロフィールを編集」ボタンは表示されない', async () => {
+    mockApiClient()
+    renderProfileView(999)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('profile-display-name')).toBeInTheDocument()
+    })
+    expect(screen.queryByTestId('profile-edit-button')).not.toBeInTheDocument()
+  })
+
+  it('アイコン画像が設定されている場合は表示名の横に表示する', async () => {
+    vi.mocked(apiClient.get).mockImplementation((url: string) => {
+      if (url === '/api/users/1') {
+        return Promise.resolve({ data: { ...profile, avatar_url: 'https://example.com/a.jpg' } })
+      }
+      if (url === '/api/requests/received') return Promise.resolve({ data: [] })
+      return Promise.resolve({ data: { results: [], has_more: false } })
+    })
+    renderProfileView(1)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('profile-avatar-image')).toHaveAttribute(
+        'src',
+        'https://example.com/a.jpg',
+      )
     })
   })
 

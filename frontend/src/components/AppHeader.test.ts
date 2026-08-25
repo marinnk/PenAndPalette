@@ -14,11 +14,11 @@ const TimelineStub = { template: '<div>timeline</div>' }
 const ProfileStub = { template: '<div>profile</div>' }
 const LoginStub = { template: '<div>login</div>' }
 
-function renderAppHeader() {
+function renderAppHeader(avatarUrl: string | null = null) {
   const pinia = createPinia()
   setActivePinia(pinia)
   const auth = useAuthStore()
-  auth.currentUser = { id: 1, username: 'taro', display_name: '太郎', avatar_url: null }
+  auth.currentUser = { id: 1, username: 'taro', display_name: '太郎', avatar_url: avatarUrl }
 
   const router = createRouter({
     history: createMemoryHistory(),
@@ -51,6 +51,23 @@ describe('AppHeader', () => {
       expect(router.currentRoute.value.name).toBe('profile')
       expect(router.currentRoute.value.params.id).toBe('1')
     })
+  })
+
+  it('アイコン画像が設定されている場合は表示名の横に表示する', async () => {
+    const { router } = renderAppHeader('https://example.com/avatar.jpg')
+    await router.isReady()
+
+    expect(screen.getByTestId('header-avatar-image')).toHaveAttribute(
+      'src',
+      'https://example.com/avatar.jpg',
+    )
+  })
+
+  it('アイコン画像が設定されていない場合は表示しない', async () => {
+    const { router } = renderAppHeader()
+    await router.isReady()
+
+    expect(screen.queryByTestId('header-avatar-image')).not.toBeInTheDocument()
   })
 
   it('ログアウトボタンでログアウトしログイン画面へ遷移する', async () => {

@@ -48,6 +48,13 @@ watch(
       </p>
       <template v-else>
         <div class="profile-header">
+          <img
+            v-if="profile.avatar_url"
+            :src="profile.avatar_url"
+            alt=""
+            class="profile-avatar"
+            data-testid="profile-avatar-image"
+          />
           <h1 data-testid="profile-display-name">{{ profile.display_name }}</h1>
           <p v-if="profile.bio" data-testid="profile-bio">{{ profile.bio }}</p>
           <p class="profile-follow-counts">
@@ -68,15 +75,16 @@ watch(
               フォロワー {{ profile.follower_count }}
             </button>
           </p>
-          <button
-            v-if="isOwnProfile"
-            type="button"
-            class="form-submit"
-            data-testid="profile-compose-button"
-            @click="router.push({ name: 'post-create' })"
-          >
-            投稿する
-          </button>
+          <div v-if="isOwnProfile" class="profile-header-actions">
+            <button
+              type="button"
+              class="form-submit"
+              data-testid="profile-edit-button"
+              @click="router.push({ name: 'profile-edit', params: { id: props.id } })"
+            >
+              プロフィールを編集
+            </button>
+          </div>
           <div v-else class="profile-header-actions">
             <button
               type="button"
@@ -97,6 +105,16 @@ watch(
             </button>
           </div>
         </div>
+
+        <button
+          v-if="isOwnProfile"
+          type="button"
+          class="form-submit"
+          data-testid="profile-compose-button"
+          @click="router.push({ name: 'post-create' })"
+        >
+          投稿する
+        </button>
 
         <p v-if="followError" class="field-error" data-testid="follow-error">
           {{ followError }}

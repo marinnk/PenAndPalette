@@ -70,9 +70,25 @@ function onDeleteClick() {
         :data-testid="`author-link-${post.id}`"
         @click.stop
       >
+        <img
+          v-if="post.author.avatar_url"
+          :src="post.author.avatar_url"
+          alt=""
+          class="post-card-avatar"
+          :data-testid="`author-avatar-${post.id}`"
+        />
         {{ post.author.display_name }}
       </RouterLink>
-      <span v-else class="post-card-author">{{ post.author.display_name }}</span>
+      <span v-else class="post-card-author">
+        <img
+          v-if="post.author.avatar_url"
+          :src="post.author.avatar_url"
+          alt=""
+          class="post-card-avatar"
+          :data-testid="`author-avatar-${post.id}`"
+        />
+        {{ post.author.display_name }}
+      </span>
       <span class="post-card-header-right">
         <span class="post-card-meta">{{ formattedDate }}</span>
         <span v-if="isOwnPost && !preview" class="post-card-author-actions">

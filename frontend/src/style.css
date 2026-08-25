@@ -378,6 +378,19 @@ code {
   text-decoration: none;
 }
 
+.app-header-profile-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.app-header-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
 .app-header-nav button {
   border: 1px solid var(--border);
   background: transparent;
@@ -506,9 +519,19 @@ code {
 }
 
 .post-card-author {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   color: var(--text-h);
   font-weight: 500;
   text-decoration: none;
+}
+
+.post-card-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
 }
 
 .post-card-header-right {
@@ -785,6 +808,14 @@ code {
   margin-bottom: 24px;
 }
 
+.profile-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  object-fit: cover;
+  margin-bottom: 8px;
+}
+
 .profile-header h1 {
   font-size: 24px;
   margin: 0 0 8px;
@@ -869,6 +900,43 @@ code {
   border-bottom: 1px solid var(--border);
   color: var(--text-h);
   text-decoration: none;
+}
+
+/* S08 プロフィール編集画面 */
+.profile-edit-avatar-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.profile-edit-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.profile-edit-avatar-placeholder {
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+}
+
+.profile-edit-avatar-picker {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 16px;
+  background: transparent;
+  color: var(--text-h);
+  font: inherit;
+  cursor: pointer;
+}
+
+.profile-edit-avatar-picker:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .ticks {

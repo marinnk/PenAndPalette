@@ -35,8 +35,16 @@ async function handleLogout() {
       <RouterLink
         v-if="auth.currentUser"
         :to="{ name: 'profile', params: { id: auth.currentUser.id } }"
+        class="app-header-profile-link"
         data-testid="header-profile-link"
       >
+        <img
+          v-if="auth.currentUser.avatar_url"
+          :src="auth.currentUser.avatar_url"
+          alt=""
+          class="app-header-avatar"
+          data-testid="header-avatar-image"
+        />
         {{ auth.currentUser.display_name }}
       </RouterLink>
 

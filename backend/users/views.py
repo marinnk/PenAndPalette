@@ -1,3 +1,5 @@
+import logging
+
 from django.contrib.auth import authenticate
 from django.shortcuts import get_object_or_404
 from rest_framework import status
@@ -6,6 +8,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from common.permissions import get_other_user_or_400
+from common.storage import delete_image
 from users.cookies import (
     REFRESH_COOKIE_NAME,
     clear_auth_cookies,
@@ -14,16 +17,32 @@ from users.cookies import (
 )
 from users.models import Follow, InvalidRefreshToken, RefreshToken, User
 from users.serializers import (
+    AvatarUploadSerializer,
     FollowActionSerializer,
     LoginSerializer,
+    ProfileUpdateSerializer,
     RegisterSerializer,
     UserProfileSerializer,
     UserSerializer,
 )
 
+logger = logging.getLogger(__name__)
+
 # ログイン失敗時のメッセージ。メール未登録・パスワード誤りのどちらでも同じ文言にすることで、
 # メールアドレスの登録有無を外部から推測されないようにする（ユーザー列挙対策）
 _INVALID_CREDENTIALS_MESSAGE = "メールアドレスまたはパスワードが正しくありません。"
+
+
+def _delete_avatar_best_effort(url):
+    """アイコン画像の置き換え・削除に伴うS3上の旧画像の後始末。DBの更新は既に確定済みのため、
+    ここでの失敗はレスポンスを失敗させない（posts.views._delete_images_best_effortと同じ理由）。
+    """
+    if not url:
+        return
+    try:
+        delete_image(url)
+    except Exception:
+        logger.exception("アイコン画像の削除に失敗しました: %s", url)
 
 
 class RegisterView(APIView):
@@ -126,6 +145,48 @@ class UserProfileView(APIView):
 def _reload_with_follow_stats(user_id, viewer):
     """フォロー/フォロー解除の直後に最新のfollower_count等を1件だけ再取得する。"""
     return User.objects.with_follow_stats(viewer).get(pk=user_id)
+
+
+class MeProfileView(APIView):
+    """PUT /api/users/me 自分のプロフィール（自己紹介のみ）を編集する（基本設計書6.6章）。
+
+    レスポンス形式をGET /api/users/{id}と揃えるため、更新後にwith_follow_stats(request.user)で
+    再取得しUserProfileSerializerで返す（自分自身が閲覧者のため、followed_by_meは常にFalse）。
+    """
+
+    def put(self, request):
+        serializer = ProfileUpdateSerializer(request.user, data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        user = _reload_with_follow_stats(request.user.id, request.user)
+        return Response(UserProfileSerializer(user).data)
+
+
+class MeAvatarView(APIView):
+    """POST /api/users/me/avatar 自分のアイコン画像を登録・上書きする。
+    DELETE /api/users/me/avatar 自分のアイコン画像を削除する（基本設計書6.6章）。
+
+    どちらもrequest.user自身が対象のため、IsOwner等のオブジェクトレベル権限は不要。
+    """
+
+    def post(self, request):
+        serializer = AvatarUploadSerializer(request.user, data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        # S3の実削除はDBコミット確定後に行う（AvatarUploadSerializer.updateのコメント参照）
+        _delete_avatar_best_effort(user._removed_avatar_url)
+        user = _reload_with_follow_stats(user.id, request.user)
+        return Response(UserProfileSerializer(user).data)
+
+    def delete(self, request):
+        # 未設定の場合も200でエラーにせず現在の状態を返す（基本設計書6.6章、冪等）
+        old_url = request.user.avatar_url
+        if old_url:
+            request.user.avatar_url = None
+            request.user.save(update_fields=["avatar_url", "updated_at"])
+            _delete_avatar_best_effort(old_url)
+        user = _reload_with_follow_stats(request.user.id, request.user)
+        return Response(UserProfileSerializer(user).data)
 
 
 class FollowView(APIView):

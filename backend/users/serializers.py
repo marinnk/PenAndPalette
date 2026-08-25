@@ -1,7 +1,9 @@
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import transaction
 from rest_framework import serializers
 
+from common.storage import upload_image, validate_image_file
 from users.models import User
 
 
@@ -81,3 +83,43 @@ class FollowActionSerializer(serializers.Serializer):
 
     followed_by_me = serializers.BooleanField(read_only=True)
     follower_count = serializers.IntegerField(read_only=True)
+
+
+class ProfileUpdateSerializer(serializers.Serializer):
+    """PUT /api/users/me のリクエストボディ検証・自己紹介の更新を担う（基本設計書6.6章）。
+
+    bioは0〜160文字（空文字も許可）。省略と空文字を区別する必要が無い（posts.PostUpdateSerializerの
+    keep_image_idsと違い、bioは他のフィールドの状態に影響しないため）ため、他のCharField同様に
+    required=Trueのみで足りる。
+    """
+
+    bio = serializers.CharField(max_length=160, allow_blank=True, trim_whitespace=True)
+
+    def update(self, instance, validated_data):
+        instance.bio = validated_data["bio"] or None
+        instance.save(update_fields=["bio", "updated_at"])
+        return instance
+
+
+class AvatarUploadSerializer(serializers.Serializer):
+    """POST /api/users/me/avatar のリクエストボディ検証・アイコン画像の登録／置き換えを担う
+    （基本設計書6.6章）。multipart/form-data、フィールド名`file`。
+    """
+
+    file = serializers.FileField()
+
+    def validate_file(self, value):
+        validate_image_file(value)
+        return value
+
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        # S3上の旧画像の実削除はここでは行わず、旧URLをinstance._removed_avatar_urlに
+        # 記録するだけにとどめる。実削除はビュー側でこのメソッドの成功（＝DBコミット確定）後に
+        # 行う（posts.PostUpdateSerializer.updateと同じ理由：先に消すとロールバック時に
+        # 「DB上は旧URLに戻ったのにS3の実体は既に消えている」という不整合を生むため）
+        old_url = instance.avatar_url
+        instance.avatar_url = upload_image(validated_data["file"], folder="avatars")
+        instance.save(update_fields=["avatar_url", "updated_at"])
+        instance._removed_avatar_url = old_url
+        return instance

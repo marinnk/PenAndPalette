@@ -20,3 +20,14 @@ export function validateNewImage(file: File, currentCount: number): string | nul
   if (file.size > MAX_IMAGE_SIZE_BYTES) return '画像は1枚あたり5MBまでです。'
   return null
 }
+
+/** アイコン画像を検証する。投稿画像と違い常に1枚を選び直す（置き換える）だけのため、
+ * validateNewImageと違い選択済み枚数のチェックは不要。useProfileEditで使う
+ */
+export function validateAvatarFile(file: File): string | null {
+  if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+    return '画像はjpgまたはpng形式のみ添付できます。'
+  }
+  if (file.size > MAX_IMAGE_SIZE_BYTES) return '画像は1枚あたり5MBまでです。'
+  return null
+}
