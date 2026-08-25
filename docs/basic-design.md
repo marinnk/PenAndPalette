@@ -413,7 +413,7 @@ erDiagram
 | 項目 | 内容 |
 |---|---|
 | インフラ構成 | 本番環境のAWS構成（RaiseTechSNSとの共通化範囲）は別途整理する。ただし1点、姉妹プロジェクトからの変更点として方針を決定済み：RaiseTechSNSはフロントエンド用S3バケットのみ非公開（CloudFront OAC経由のみ）とし、アバター用S3バケットは`S3StorageService`が直リンクURLを発行する実装の都合で公開バケットのままだった（[RaiseTechSNS/terraform/s3.tf](../../RaiseTechSNS/terraform/s3.tf)）。PenAndPaletteでは画像用（アイコン・投稿・コメント）S3バケットもフロントエンドと同様に非公開とし、CloudFrontに`/media/*`等のパスベースビヘイビアを追加してOAC経由でのみ配信する（`/api/*`→ALB、それ以外→フロントエンドS3、`/media/*`→画像用S3、の3オリジン構成）。バックエンド側は`AWS_S3_CUSTOM_DOMAIN`にCloudFrontのドメインを設定し、生成される画像URLがCloudFront経由になるようにする。パスパターン名・バケット構成等の詳細は、インフラ構成の検討時に確定する。<br>その他、RaiseTechSNS側が「学習用途なら許容、恒久運用なら要見直し」と明記している既知の妥協点（[RaiseTechSNS/docs/infrastructure-design.md 6章](../../RaiseTechSNS/docs/infrastructure-design.md#6-今回の実装で残した既知の妥協点)）も、踏襲するか見直すかは同様にインフラ構成の検討時に判断する：S3への認証情報（静的IAMアクセスキー vs ECSタスクロール。Djangoはboto3のデフォルト認証チェーンがタスクロールを自動的に拾うため改善しやすい可能性あり）、ALB〜CloudFront間がHTTP、ALBの保護がCloudFrontの送信元IPレンジのみ、Terraform stateのローカル保存。CI/CD方式（ECRへのpush・ECSへのデプロイ自動化）はRaiseTechSNS自身も未確定 |
-| リクエストの見落とし対策 | 現状は届いたリクエストをプロフィール画面で確認する方式のみ。件数バッジや既読管理などの改善は次バージョン以降で検討する |
+| リクエストの見落とし対策 | 現状は画面共通ヘッダーの通知バッジ（件数表示）で確認する方式のみ。メール等の外部通知や既読管理などの改善は次バージョン以降で検討する |
 
 ## 8. 改訂履歴
 
