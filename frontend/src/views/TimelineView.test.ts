@@ -22,6 +22,7 @@ vi.stubGlobal('IntersectionObserver', IntersectionObserverStub)
 const PostCreateStub = { template: '<div>post-create</div>' }
 const PostDetailStub = { template: '<div>post-detail</div>' }
 const ProfileStub = { template: '<div>profile</div>' }
+const SearchStub = { template: '<div>search</div>' }
 
 function makePost(id: number, overrides: Partial<Post> = {}): Post {
   return {
@@ -71,6 +72,7 @@ function renderTimelineView() {
       { path: '/posts/new', name: 'post-create', component: PostCreateStub },
       { path: '/posts/:id', name: 'post-detail', component: PostDetailStub },
       { path: '/profile/:id', name: 'profile', component: ProfileStub },
+      { path: '/search', name: 'user-search', component: SearchStub },
     ],
   })
   const result = render(TimelineView, { global: { plugins: [pinia, router] } })

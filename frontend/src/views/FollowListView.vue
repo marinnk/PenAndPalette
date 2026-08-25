@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import BackLink from '@/components/BackLink.vue'
 import { useFollowList } from '@/composables/useFollowList'
 import type { FollowListTab } from '@/composables/useFollowList'
 
@@ -22,13 +23,11 @@ watch(
 
 <template>
   <main class="follow-list">
-    <button
-      type="button"
-      data-testid="back-to-profile"
-      @click="router.push({ name: 'profile', params: { id: props.id } })"
-    >
-      ← プロフィールに戻る
-    </button>
+    <BackLink
+      :to="{ name: 'profile', params: { id: props.id } }"
+      label="← プロフィールに戻る"
+      testid="back-to-profile"
+    />
 
     <div class="follow-list-tabs">
       <button

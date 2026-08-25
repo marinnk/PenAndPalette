@@ -1,11 +1,25 @@
 from django.contrib.auth.base_user import BaseUserManager
-from django.db.models import Count, Exists, OuterRef
+from django.db.models import Count, Exists, OuterRef, Q
 
 
 class UserManager(BaseUserManager):
     """`email`を識別子（USERNAME_FIELD）として利用者を作成するマネージャー。"""
 
     use_in_migrations = True
+
+    def search(self, keyword):
+        """ユーザー名または表示名の部分一致で利用者を検索する（基本設計書6.8章）。
+
+        keywordが未指定・空文字・空白のみの場合は検索を行わず空のQuerySetを返す
+        （バリデーションエラーにはしない）。学習規模のデータ量を前提にDBのLIKE検索
+        （icontains）で実現し、全文検索エンジンは導入しない。
+        """
+        keyword = (keyword or "").strip()
+        if not keyword:
+            return self.none()
+        return self.filter(
+            Q(username__icontains=keyword) | Q(display_name__icontains=keyword)
+        ).order_by("username")
 
     def with_follow_stats(self, viewer):
         """フォロー中/フォロワー数・フォロー中かどうかを1クエリで付与する（基本設計書6.6章）。

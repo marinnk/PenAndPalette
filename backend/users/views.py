@@ -233,3 +233,15 @@ class FollowingListView(APIView):
         get_object_or_404(User, pk=user_id)
         following = User.objects.filter(followers__follower_id=user_id).order_by("-followers__id")
         return Response(UserSerializer(following, many=True).data)
+
+
+class UserSearchView(APIView):
+    """GET /api/users/?q=<キーワード> ユーザー名・表示名でユーザーを検索する（基本設計書6.8章）。
+
+    qが未指定・空文字の場合はバリデーションエラーにはせず空の結果を返す。
+    学習規模のデータ量を前提にページネーションは設けない（FollowersListViewと同方針）。
+    """
+
+    def get(self, request):
+        users = User.objects.search(request.query_params.get("q"))
+        return Response(UserSerializer(users, many=True).data)

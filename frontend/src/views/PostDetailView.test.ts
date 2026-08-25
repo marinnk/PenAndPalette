@@ -12,6 +12,7 @@ vi.mock('@/lib/apiClient', () => ({
 
 const TimelineStub = { template: '<div>timeline</div>' }
 const ProfileStub = { template: '<div>profile</div>' }
+const SearchStub = { template: '<div>search</div>' }
 
 // 各テストがミューテーション（いいねのトグル等）で汚染しないよう、呼び出しごとに
 // 新しいオブジェクトを返すファクトリにする（固定のconstだと、あるテストでの
@@ -55,6 +56,7 @@ async function renderPostDetailView(id = '1', currentUserId = 1) {
       { path: '/', name: 'timeline', component: TimelineStub },
       { path: '/posts/:id', name: 'post-detail', component: PostDetailView, props: true },
       { path: '/profile/:id', name: 'profile', component: ProfileStub },
+      { path: '/search', name: 'user-search', component: SearchStub },
     ],
   })
   await router.push({ name: 'post-detail', params: { id } })
