@@ -63,11 +63,14 @@ describe('AppHeader', () => {
     )
   })
 
-  it('アイコン画像が設定されていない場合は表示しない', async () => {
+  it('アイコン画像が設定されていない場合は画像の代わりにプレースホルダーを表示する（表示位置は空けておく）', async () => {
     const { router } = renderAppHeader()
     await router.isReady()
 
     expect(screen.queryByTestId('header-avatar-image')).not.toBeInTheDocument()
+    expect(
+      screen.getByTestId('header-profile-link').querySelector('.avatar-placeholder'),
+    ).toBeInTheDocument()
   })
 
   it('ログアウトボタンでログアウトしログイン画面へ遷移する', async () => {

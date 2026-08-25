@@ -78,11 +78,7 @@ async function handleSave() {
             class="profile-edit-avatar"
             data-testid="profile-edit-avatar-image"
           />
-          <div
-            v-else
-            class="profile-edit-avatar profile-edit-avatar-placeholder"
-            aria-hidden="true"
-          ></div>
+          <div v-else class="profile-edit-avatar avatar-placeholder" aria-hidden="true"></div>
           <label class="profile-edit-avatar-picker" data-testid="profile-edit-avatar-picker">
             画像を選択
             <input

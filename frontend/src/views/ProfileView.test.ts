@@ -96,6 +96,17 @@ beforeEach(() => {
 })
 
 describe('ProfileView', () => {
+  it('アイコン画像が設定されていない場合は画像の代わりにプレースホルダーを表示する（表示位置は空けておく）', async () => {
+    mockApiClient()
+    renderProfileView(1)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('profile-display-name')).toBeInTheDocument()
+    })
+    expect(screen.queryByTestId('profile-avatar-image')).not.toBeInTheDocument()
+    expect(document.querySelector('.profile-header .avatar-placeholder')).toBeInTheDocument()
+  })
+
   it('プロフィール情報と投稿一覧を表示する', async () => {
     mockApiClient()
     renderProfileView(1)

@@ -45,6 +45,7 @@ async function handleLogout() {
           class="app-header-avatar"
           data-testid="header-avatar-image"
         />
+        <div v-else class="app-header-avatar avatar-placeholder" aria-hidden="true"></div>
         {{ auth.currentUser.display_name }}
       </RouterLink>
 

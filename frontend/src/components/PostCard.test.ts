@@ -151,11 +151,14 @@ describe('PostCard', () => {
     )
   })
 
-  it('投稿者にアイコン画像が設定されていない場合は表示しない', async () => {
+  it('投稿者にアイコン画像が設定されていない場合は画像の代わりにプレースホルダーを表示する（表示位置は空けておく）', async () => {
     const { router } = renderPostCard()
     await router.isReady()
 
     expect(screen.queryByTestId('author-avatar-42')).not.toBeInTheDocument()
+    expect(
+      screen.getByTestId('author-link-42').querySelector('.avatar-placeholder'),
+    ).toBeInTheDocument()
   })
 
   it('imagesがある投稿では画像を並べて表示する', async () => {

@@ -55,6 +55,7 @@ watch(
             class="profile-avatar"
             data-testid="profile-avatar-image"
           />
+          <div v-else class="profile-avatar avatar-placeholder" aria-hidden="true"></div>
           <h1 data-testid="profile-display-name">{{ profile.display_name }}</h1>
           <p v-if="profile.bio" data-testid="profile-bio">{{ profile.bio }}</p>
           <p class="profile-follow-counts">

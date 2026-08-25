@@ -77,6 +77,7 @@ function onDeleteClick() {
           class="post-card-avatar"
           :data-testid="`author-avatar-${post.id}`"
         />
+        <div v-else class="post-card-avatar avatar-placeholder" aria-hidden="true"></div>
         {{ post.author.display_name }}
       </RouterLink>
       <span v-else class="post-card-author">
@@ -87,6 +88,7 @@ function onDeleteClick() {
           class="post-card-avatar"
           :data-testid="`author-avatar-${post.id}`"
         />
+        <div v-else class="post-card-avatar avatar-placeholder" aria-hidden="true"></div>
         {{ post.author.display_name }}
       </span>
       <span class="post-card-header-right">

@@ -391,6 +391,14 @@ code {
   object-fit: cover;
 }
 
+/* アイコン画像が未設定の利用者でも、名前の横にアイコン分のスペースを開けておき
+   見た目の統一感を保つためのプレースホルダー（円形の.xxx-avatarクラスと組み合わせて使う） */
+.avatar-placeholder {
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
 .app-header-nav button {
   border: 1px solid var(--border);
   background: transparent;
@@ -915,11 +923,6 @@ code {
   border-radius: 50%;
   object-fit: cover;
   flex-shrink: 0;
-}
-
-.profile-edit-avatar-placeholder {
-  background: var(--code-bg);
-  border: 1px solid var(--border);
 }
 
 .profile-edit-avatar-picker {
