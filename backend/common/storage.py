@@ -1,9 +1,12 @@
+import logging
 import uuid
 from pathlib import PurePosixPath
 from urllib.parse import urlparse
 
 from django.core.files.storage import default_storage
 from rest_framework import serializers
+
+logger = logging.getLogger(__name__)
 
 # 基本設計書5章: 画像アップロードはjpg/png・1枚あたり5MBまで
 # （投稿画像・コメント画像・アイコン画像で共通のルール）。添付できる枚数の上限は機能ごとに異なる
@@ -49,3 +52,23 @@ def delete_image(image_url):
     segments = urlparse(image_url).path.strip("/").split("/")
     key = "/".join(segments[-2:])
     default_storage.delete(key)
+
+
+def delete_images_best_effort(urls):
+    """複数（1件でも可）の画像をベストエフォートでストレージから削除する
+    （投稿・コメント・アイコン画像の編集・削除で共通して使う）。
+
+    呼び出し時点でDBの更新・削除は既に確定済みであることが前提のため、ここでの失敗は
+    レスポンスを失敗させない（成功しているDB操作を「失敗した」と利用者に誤解させないため）。
+    1件の失敗が残りの削除を止めないよう、URLごとに例外を捕捉してログに残し、次のURLへ進む。
+    孤立したファイルは監視・別途のクリーンアップ対象とする（今回のスコープ外）。
+    Noneや空文字などfalsyな要素は「削除対象が無かった」ものとして無視する
+    （アイコン画像のように対象が0〜1件の呼び出し元で、存在確認を呼び出し側に書かせないため）。
+    """
+    for url in urls:
+        if not url:
+            continue
+        try:
+            delete_image(url)
+        except Exception:
+            logger.exception("画像の削除に失敗しました: %s", url)

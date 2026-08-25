@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import AvatarIcon from '@/components/AvatarIcon.vue'
 import type { Post } from '@/types/post'
 
 // S03/S05/S07で共通利用する投稿カード（画面設計書126〜133行目）。
@@ -70,9 +71,13 @@ function onDeleteClick() {
         :data-testid="`author-link-${post.id}`"
         @click.stop
       >
+        <AvatarIcon :src="post.author.avatar_url" :size="24" :testid="`author-avatar-${post.id}`" />
         {{ post.author.display_name }}
       </RouterLink>
-      <span v-else class="post-card-author">{{ post.author.display_name }}</span>
+      <span v-else class="post-card-author">
+        <AvatarIcon :src="post.author.avatar_url" :size="24" :testid="`author-avatar-${post.id}`" />
+        {{ post.author.display_name }}
+      </span>
       <span class="post-card-header-right">
         <span class="post-card-meta">{{ formattedDate }}</span>
         <span v-if="isOwnPost && !preview" class="post-card-author-actions">

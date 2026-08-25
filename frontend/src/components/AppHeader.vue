@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useReceivedRequests } from '@/composables/useReceivedRequests'
+import AvatarIcon from '@/components/AvatarIcon.vue'
 
 // S03・S05・S07・S09が共通で持つヘッダー（画面設計書1.5節）。
 // 検索（S09）への導線は今回のスコープ外のため設けない
@@ -35,8 +36,10 @@ async function handleLogout() {
       <RouterLink
         v-if="auth.currentUser"
         :to="{ name: 'profile', params: { id: auth.currentUser.id } }"
+        class="app-header-profile-link"
         data-testid="header-profile-link"
       >
+        <AvatarIcon :src="auth.currentUser.avatar_url" :size="28" testid="header-avatar-image" />
         {{ auth.currentUser.display_name }}
       </RouterLink>
 

@@ -137,6 +137,30 @@ describe('PostCard', () => {
     expect(screen.queryByRole('img')).not.toBeInTheDocument()
   })
 
+  it('投稿者にアイコン画像が設定されている場合は投稿者名の横に表示する', async () => {
+    const withAvatar = {
+      ...post,
+      author: { ...post.author, avatar_url: 'https://example.com/avatar.jpg' },
+    }
+    const { router } = renderPostCard({ post: withAvatar })
+    await router.isReady()
+
+    expect(screen.getByTestId('author-avatar-42')).toHaveAttribute(
+      'src',
+      'https://example.com/avatar.jpg',
+    )
+  })
+
+  it('投稿者にアイコン画像が設定されていない場合は画像の代わりにプレースホルダーを表示する（表示位置は空けておく）', async () => {
+    const { router } = renderPostCard()
+    await router.isReady()
+
+    expect(screen.queryByTestId('author-avatar-42')).not.toBeInTheDocument()
+    expect(
+      screen.getByTestId('author-link-42').querySelector('.avatar-placeholder'),
+    ).toBeInTheDocument()
+  })
+
   it('imagesがある投稿では画像を並べて表示する', async () => {
     const withImages = {
       ...post,

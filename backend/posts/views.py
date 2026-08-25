@@ -1,5 +1,3 @@
-import logging
-
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
@@ -7,7 +5,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from common.permissions import IsOwner, get_owned_object_or_404
-from common.storage import delete_image
+from common.storage import delete_images_best_effort
 from posts.models import Like, Post, Want
 from posts.serializers import (
     LikeReactionSerializer,
@@ -17,22 +15,6 @@ from posts.serializers import (
     PostUpdateSerializer,
     WantReactionSerializer,
 )
-
-logger = logging.getLogger(__name__)
-
-
-def _delete_images_best_effort(urls):
-    """投稿の編集・削除に伴うS3上の画像の後始末。DBの更新・削除は既に確定済みのため、
-    ここでの失敗はレスポンスを失敗させない（成功しているDB操作を「失敗した」と
-    利用者に誤解させないため）。1件の失敗が残りの削除を止めないよう、URLごとに
-    例外を捕捉してログに残し、次のURLへ進む。孤立したファイルは監視・別途の
-    クリーンアップ対象とする（今回のスコープ外）。
-    """
-    for url in urls:
-        try:
-            delete_image(url)
-        except Exception:
-            logger.exception("投稿の画像削除に失敗しました: %s", url)
 
 
 class PostListCreateView(APIView):
@@ -83,7 +65,7 @@ class PostDetailView(APIView):
         serializer.is_valid(raise_exception=True)
         post = serializer.save()
         # S3の実削除はDBコミット確定後に行う（PostUpdateSerializer.updateのコメント参照）
-        _delete_images_best_effort(post._removed_image_urls)
+        delete_images_best_effort(post._removed_image_urls)
         post = _reload_with_reactions(post.id, request.user)
         return Response(PostSerializer(post).data)
 
@@ -95,7 +77,7 @@ class PostDetailView(APIView):
         # ただしS3上の実ファイルはCASCADEでは消えないため、
         # 下でアプリケーション側から明示的に削除する
         post.delete()
-        _delete_images_best_effort(image_urls)
+        delete_images_best_effort(image_urls)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 

@@ -5,9 +5,20 @@
 from django.urls import path
 
 from requests_app.views import UserRequestCreateView
-from users.views import FollowersListView, FollowingListView, FollowView, UserProfileView
+from users.views import (
+    FollowersListView,
+    FollowingListView,
+    FollowView,
+    MeAvatarView,
+    MeProfileView,
+    UserProfileView,
+)
 
 urlpatterns = [
+    # "me"は<int:user_id>のintコンバータには一致しないため衝突しないが、
+    # 可読性のため自分自身向けのpathを先に置く
+    path("me", MeProfileView.as_view(), name="user-me-profile"),
+    path("me/avatar", MeAvatarView.as_view(), name="user-me-avatar"),
     path("<int:user_id>", UserProfileView.as_view(), name="user-profile"),
     path("<int:user_id>/follow", FollowView.as_view(), name="user-follow"),
     path("<int:user_id>/followers", FollowersListView.as_view(), name="user-followers"),
