@@ -45,6 +45,20 @@ class User(AbstractBaseUser, PermissionsMixin):
     def __str__(self):
         return self.username
 
+    def clear_avatar(self):
+        """アイコン画像をクリアする（DELETE /api/users/me/avatar、基本設計書6.6章）。冪等で、
+        既に未設定の場合は何もしない。戻り値は削除前のURL（未設定だった場合はNone）で、
+        呼び出し元（users/views.py）はこれを使ってS3上の実ファイルを後始末する。
+        業務ロジック（bio編集用のusers.serializers.ProfileUpdateSerializer.updateと対になる、
+        「登録済みなら消す」の判定＋保存）をビューではなくモデル層に置く
+        （CLAUDE.mdの「ビューは薄く保つ」規約）。
+        """
+        old_url = self.avatar_url
+        if old_url:
+            self.avatar_url = None
+            self.save(update_fields=["avatar_url", "updated_at"])
+        return old_url
+
 
 def hash_token(raw_token: str) -> str:
     """リフレッシュトークンの生の値からSHA-256ハッシュを計算する。

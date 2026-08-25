@@ -50,7 +50,7 @@ class MeAvatarTests(APITestCase):
                 "users.serializers.upload_image",
                 return_value="https://example.com/avatars/new.jpg",
             ),
-            patch("users.views.delete_image") as mock_delete,
+            patch("common.storage.delete_image") as mock_delete,
         ):
             response = self.client.post(self.url, {"file": make_image()}, format="multipart")
 
@@ -97,7 +97,7 @@ class MeAvatarTests(APITestCase):
                 "users.serializers.upload_image",
                 return_value="https://example.com/avatars/new.jpg",
             ),
-            patch("users.views.delete_image", side_effect=OSError),
+            patch("common.storage.delete_image", side_effect=OSError),
         ):
             response = self.client.post(self.url, {"file": make_image()}, format="multipart")
 
@@ -113,7 +113,7 @@ class MeAvatarTests(APITestCase):
         self.user.save(update_fields=["avatar_url"])
         self._login()
 
-        with patch("users.views.delete_image") as mock_delete:
+        with patch("common.storage.delete_image") as mock_delete:
             response = self.client.delete(self.url)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -125,7 +125,7 @@ class MeAvatarTests(APITestCase):
     def test_delete_when_avatar_not_set_returns_200_idempotently(self):
         self._login()
 
-        with patch("users.views.delete_image") as mock_delete:
+        with patch("common.storage.delete_image") as mock_delete:
             response = self.client.delete(self.url)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)

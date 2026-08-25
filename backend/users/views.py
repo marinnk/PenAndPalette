@@ -1,5 +1,3 @@
-import logging
-
 from django.contrib.auth import authenticate
 from django.shortcuts import get_object_or_404
 from rest_framework import status
@@ -8,7 +6,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from common.permissions import get_other_user_or_400
-from common.storage import delete_image
+from common.storage import delete_images_best_effort
 from users.cookies import (
     REFRESH_COOKIE_NAME,
     clear_auth_cookies,
@@ -26,23 +24,9 @@ from users.serializers import (
     UserSerializer,
 )
 
-logger = logging.getLogger(__name__)
-
 # ログイン失敗時のメッセージ。メール未登録・パスワード誤りのどちらでも同じ文言にすることで、
 # メールアドレスの登録有無を外部から推測されないようにする（ユーザー列挙対策）
 _INVALID_CREDENTIALS_MESSAGE = "メールアドレスまたはパスワードが正しくありません。"
-
-
-def _delete_avatar_best_effort(url):
-    """アイコン画像の置き換え・削除に伴うS3上の旧画像の後始末。DBの更新は既に確定済みのため、
-    ここでの失敗はレスポンスを失敗させない（posts.views._delete_images_best_effortと同じ理由）。
-    """
-    if not url:
-        return
-    try:
-        delete_image(url)
-    except Exception:
-        logger.exception("アイコン画像の削除に失敗しました: %s", url)
 
 
 class RegisterView(APIView):
@@ -143,23 +127,39 @@ class UserProfileView(APIView):
 
 
 def _reload_with_follow_stats(user_id, viewer):
-    """フォロー/フォロー解除の直後に最新のfollower_count等を1件だけ再取得する。"""
+    """フォロー/フォロー解除の直後に最新のfollower_count等を1件だけ再取得する
+    （viewerが対象user_id自身とは限らない、UserProfileView・FollowView向けの汎用版）。
+    """
     return User.objects.with_follow_stats(viewer).get(pk=user_id)
+
+
+def _attach_own_follow_stats(user):
+    """PUT /api/users/me・POST/DELETE /api/users/me/avatar向けの軽量版。
+
+    いずれも「更新した自分自身をレスポンスとして返す」自己参照的なエンドポイントで、
+    引数のuserは既にbio/avatar_url更新後の状態がメモリ上にある。_reload_with_follow_stats
+    （usersテーブルへ2distinct-JOIN＋EXISTSで再SELECTする、他人の閲覧も想定した汎用版）を
+    使うと、変化していないusername・display_name等まで含めて丸ごと再取得してしまい無駄が大きい。
+    自己フォローはfollowsテーブルのCHECK制約で禁止されているためfollowed_by_meは常にFalseと
+    自明で、follower_count・following_countもFollowモデルへの軽いCOUNTクエリ2本で済む。
+    """
+    user.follower_count = Follow.objects.filter(followee=user).count()
+    user.following_count = Follow.objects.filter(follower=user).count()
+    user.followed_by_me = False
+    return user
 
 
 class MeProfileView(APIView):
     """PUT /api/users/me 自分のプロフィール（自己紹介のみ）を編集する（基本設計書6.6章）。
 
-    レスポンス形式をGET /api/users/{id}と揃えるため、更新後にwith_follow_stats(request.user)で
-    再取得しUserProfileSerializerで返す（自分自身が閲覧者のため、followed_by_meは常にFalse）。
+    レスポンス形式をGET /api/users/{id}と揃えるため、UserProfileSerializerで返す。
     """
 
     def put(self, request):
         serializer = ProfileUpdateSerializer(request.user, data=request.data)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
-        user = _reload_with_follow_stats(request.user.id, request.user)
-        return Response(UserProfileSerializer(user).data)
+        user = serializer.save()
+        return Response(UserProfileSerializer(_attach_own_follow_stats(user)).data)
 
 
 class MeAvatarView(APIView):
@@ -174,19 +174,15 @@ class MeAvatarView(APIView):
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
         # S3の実削除はDBコミット確定後に行う（AvatarUploadSerializer.updateのコメント参照）
-        _delete_avatar_best_effort(user._removed_avatar_url)
-        user = _reload_with_follow_stats(user.id, request.user)
-        return Response(UserProfileSerializer(user).data)
+        delete_images_best_effort([user._removed_avatar_url])
+        return Response(UserProfileSerializer(_attach_own_follow_stats(user)).data)
 
     def delete(self, request):
-        # 未設定の場合も200でエラーにせず現在の状態を返す（基本設計書6.6章、冪等）
-        old_url = request.user.avatar_url
-        if old_url:
-            request.user.avatar_url = None
-            request.user.save(update_fields=["avatar_url", "updated_at"])
-            _delete_avatar_best_effort(old_url)
-        user = _reload_with_follow_stats(request.user.id, request.user)
-        return Response(UserProfileSerializer(user).data)
+        # 未設定の場合も200でエラーにせず現在の状態を返す（基本設計書6.6章、冪等）。
+        # 「登録済みなら消す」の判定・保存はUser.clear_avatar()に委ねる（ビューは薄く保つ）
+        old_url = request.user.clear_avatar()
+        delete_images_best_effort([old_url])
+        return Response(UserProfileSerializer(_attach_own_follow_stats(request.user)).data)
 
 
 class FollowView(APIView):

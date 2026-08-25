@@ -1,6 +1,7 @@
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from users.models import Follow
 from users.tests.conftest import DEFAULT_PASSWORD, create_user
 
 
@@ -83,3 +84,20 @@ class MeProfileUpdateTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("bio", response.json())
+
+    def test_update_reflects_follower_and_following_counts(self):
+        # MeProfileView.putは_reload_with_follow_stats（usersテーブルの再SELECT）を経由せず
+        # Followモデルへの軽いCOUNTクエリで件数を数える（_attach_own_follow_stats）ため、
+        # その集計が実際のフォロー関係と一致することを確認する
+        follower = create_user(username="follower", email="follower@example.com")
+        followee = create_user(username="followee", email="followee@example.com")
+        Follow.objects.add(follower, self.user)
+        Follow.objects.add(self.user, followee)
+        self._login()
+
+        response = self.client.put(self.url, {"bio": "更新後"})
+
+        body = response.json()
+        self.assertEqual(body["follower_count"], 1)
+        self.assertEqual(body["following_count"], 1)
+        self.assertFalse(body["followed_by_me"])

@@ -64,7 +64,7 @@ class PostDeleteTests(APITestCase):
         create_post_image(self.post, image_url="https://example.com/2.jpg", display_order=1)
         self._login()
 
-        with patch("posts.views.delete_image") as mock_delete:
+        with patch("common.storage.delete_image") as mock_delete:
             self.client.delete(self._url())
 
         self.assertEqual(mock_delete.call_count, 2)
@@ -74,7 +74,7 @@ class PostDeleteTests(APITestCase):
     def test_delete_post_without_images_does_not_call_delete_image(self):
         self._login()
 
-        with patch("posts.views.delete_image") as mock_delete:
+        with patch("common.storage.delete_image") as mock_delete:
             self.client.delete(self._url())
 
         mock_delete.assert_not_called()
@@ -86,7 +86,7 @@ class PostDeleteTests(APITestCase):
         create_post_image(self.post, image_url="https://example.com/2.jpg", display_order=1)
         self._login()
 
-        with patch("posts.views.delete_image", side_effect=[OSError, None]) as mock_delete:
+        with patch("common.storage.delete_image", side_effect=[OSError, None]) as mock_delete:
             response = self.client.delete(self._url())
 
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)

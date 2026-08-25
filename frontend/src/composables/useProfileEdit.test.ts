@@ -62,6 +62,17 @@ describe('useProfileEdit', () => {
     expect(bio.value).toBe('')
   })
 
+  it('load: 取得に失敗した場合はloadErrorをtrueにする', async () => {
+    vi.mocked(apiClient.get).mockRejectedValueOnce(new Error('network error'))
+    setUpAuth()
+
+    const { load, loadError, profile: loadedProfile } = useProfileEdit()
+    await load(1)
+
+    expect(loadError.value).toBe(true)
+    expect(loadedProfile.value).toBeNull()
+  })
+
   it('save: PUT /api/users/meで自己紹介を保存する', async () => {
     setUpAuth()
     const { bio, save, profile: current } = useProfileEdit()
@@ -121,6 +132,29 @@ describe('useProfileEdit', () => {
 
     expect(apiClient.post).not.toHaveBeenCalled()
     expect(avatarError.value).toBe('画像は1枚あたり5MBまでです。')
+  })
+
+  it('uploadAvatar: サーバー側で400エラーになった場合はfileフィールドのエラーをavatarErrorに反映する', async () => {
+    setUpAuth()
+    const { uploadAvatar, avatarError } = useProfileEdit()
+    vi.mocked(apiClient.post).mockRejectedValueOnce({
+      isAxiosError: true,
+      response: { status: 400, data: { file: ['画像は1枚あたり5MBまでです。'] } },
+    })
+
+    await uploadAvatar(makeImageFile())
+
+    expect(avatarError.value).toBe('画像は1枚あたり5MBまでです。')
+  })
+
+  it('uploadAvatar: fileフィールドのエラーが無い場合は汎用エラーメッセージにする', async () => {
+    setUpAuth()
+    const { uploadAvatar, avatarError } = useProfileEdit()
+    vi.mocked(apiClient.post).mockRejectedValueOnce(new Error('network error'))
+
+    await uploadAvatar(makeImageFile())
+
+    expect(avatarError.value).toBe('アイコン画像の更新に失敗しました。')
   })
 
   it('removeAvatar: DELETE /api/users/me/avatarでアイコン画像を削除し、authストアにも反映する', async () => {

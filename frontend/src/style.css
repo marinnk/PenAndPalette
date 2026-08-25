@@ -384,19 +384,22 @@ code {
   gap: 8px;
 }
 
-.app-header-avatar {
-  width: 28px;
-  height: 28px;
+/* アイコン画像の共通スタイル（components/AvatarIcon.vueが使う）。ヘッダー・投稿カード・
+   プロフィール画面・プロフィール編集画面で表示サイズだけが異なるため、実寸は
+   AvatarIcon.vueが--avatar-sizeとしてインラインで渡す */
+.avatar {
+  width: var(--avatar-size, 32px);
+  height: var(--avatar-size, 32px);
   border-radius: 50%;
   object-fit: cover;
+  flex-shrink: 0;
 }
 
 /* アイコン画像が未設定の利用者でも、名前の横にアイコン分のスペースを開けておき
-   見た目の統一感を保つためのプレースホルダー（円形の.xxx-avatarクラスと組み合わせて使う） */
+   見た目の統一感を保つためのプレースホルダー（.avatarと組み合わせて使う） */
 .avatar-placeholder {
   background: var(--code-bg);
   border: 1px solid var(--border);
-  flex-shrink: 0;
 }
 
 .app-header-nav button {
@@ -533,13 +536,6 @@ code {
   color: var(--text-h);
   font-weight: 500;
   text-decoration: none;
-}
-
-.post-card-avatar {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  object-fit: cover;
 }
 
 .post-card-header-right {
@@ -816,11 +812,9 @@ code {
   margin-bottom: 24px;
 }
 
+/* 円形・サイズは共通の.avatar（AvatarIcon.vue）任せで、この画面固有のレイアウト
+   （見出しとの間隔）だけをここで指定する */
 .profile-avatar {
-  width: 64px;
-  height: 64px;
-  border-radius: 50%;
-  object-fit: cover;
   margin-bottom: 8px;
 }
 
@@ -917,14 +911,6 @@ code {
   gap: 12px;
 }
 
-.profile-edit-avatar {
-  width: 64px;
-  height: 64px;
-  border-radius: 50%;
-  object-fit: cover;
-  flex-shrink: 0;
-}
-
 .profile-edit-avatar-picker {
   display: inline-flex;
   align-items: center;
@@ -937,7 +923,12 @@ code {
   cursor: pointer;
 }
 
-.profile-edit-avatar-picker:disabled {
+/* 「削除」はbutton要素なので:disabledが効くが、「画像を選択」はlabel要素（実体の
+   input[type=file]をdisabledにしている）で:disabledが決して一致しないため、
+   :disabledと同じ見た目をavatarUpdating連動のクラスで明示的に付ける
+   （ProfileEditView.vue参照） */
+.profile-edit-avatar-picker:disabled,
+.profile-edit-avatar-picker-disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }

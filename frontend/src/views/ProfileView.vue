@@ -2,6 +2,7 @@
 import { computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import AppHeader from '@/components/AppHeader.vue'
+import AvatarIcon from '@/components/AvatarIcon.vue'
 import PostCard from '@/components/PostCard.vue'
 import { useProfile } from '@/composables/useProfile'
 import { useAuthStore } from '@/stores/auth'
@@ -48,14 +49,12 @@ watch(
       </p>
       <template v-else>
         <div class="profile-header">
-          <img
-            v-if="profile.avatar_url"
+          <AvatarIcon
             :src="profile.avatar_url"
-            alt=""
+            :size="64"
             class="profile-avatar"
-            data-testid="profile-avatar-image"
+            testid="profile-avatar-image"
           />
-          <div v-else class="profile-avatar avatar-placeholder" aria-hidden="true"></div>
           <h1 data-testid="profile-display-name">{{ profile.display_name }}</h1>
           <p v-if="profile.bio" data-testid="profile-bio">{{ profile.bio }}</p>
           <p class="profile-follow-counts">
@@ -85,6 +84,14 @@ watch(
             >
               プロフィールを編集
             </button>
+            <button
+              type="button"
+              class="form-submit"
+              data-testid="profile-compose-button"
+              @click="router.push({ name: 'post-create' })"
+            >
+              投稿する
+            </button>
           </div>
           <div v-else class="profile-header-actions">
             <button
@@ -106,16 +113,6 @@ watch(
             </button>
           </div>
         </div>
-
-        <button
-          v-if="isOwnProfile"
-          type="button"
-          class="form-submit"
-          data-testid="profile-compose-button"
-          @click="router.push({ name: 'post-create' })"
-        >
-          投稿する
-        </button>
 
         <p v-if="followError" class="field-error" data-testid="follow-error">
           {{ followError }}

@@ -1,9 +1,16 @@
+from unittest.mock import patch
+
 import pytest
 from django.core.files.storage import default_storage
 from django.core.files.uploadedfile import SimpleUploadedFile
 from rest_framework.exceptions import ValidationError
 
-from common.storage import delete_image, upload_image, validate_image_file
+from common.storage import (
+    delete_image,
+    delete_images_best_effort,
+    upload_image,
+    validate_image_file,
+)
 
 
 def make_file(name="a.jpg", content_type="image/jpeg", content=b"bytes"):
@@ -78,3 +85,30 @@ def test_delete_image_does_not_raise_for_already_deleted_file():
 
     delete_image(url)
     delete_image(url)  # 2回目もエラーにならないこと
+
+
+def test_delete_images_best_effort_deletes_all_given_urls():
+    with patch("common.storage.delete_image") as mock_delete:
+        delete_images_best_effort(["https://example.com/1.jpg", "https://example.com/2.jpg"])
+
+    assert mock_delete.call_count == 2
+    mock_delete.assert_any_call("https://example.com/1.jpg")
+    mock_delete.assert_any_call("https://example.com/2.jpg")
+
+
+def test_delete_images_best_effort_skips_falsy_urls():
+    # posts（複数枚）・users（アイコン1枚、Noneの可能性あり）の両方の呼び出し元が
+    # 存在確認を自分で書かずに済むよう、None・空文字は削除対象なしとして無視する
+    with patch("common.storage.delete_image") as mock_delete:
+        delete_images_best_effort([None, "", "https://example.com/1.jpg"])
+
+    mock_delete.assert_called_once_with("https://example.com/1.jpg")
+
+
+def test_delete_images_best_effort_continues_after_one_failure():
+    # 1件の削除失敗で残りの削除を止めない・例外を外へ伝播させない（呼び出し元はDBの
+    # 更新・削除が既に確定した後に使うため、ここでの失敗はレスポンスに影響させない）
+    with patch("common.storage.delete_image", side_effect=[OSError, None]) as mock_delete:
+        delete_images_best_effort(["https://example.com/1.jpg", "https://example.com/2.jpg"])
+
+    assert mock_delete.call_count == 2

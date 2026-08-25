@@ -2,6 +2,7 @@
 import { computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import AvatarIcon from '@/components/AvatarIcon.vue'
 import { useProfileEdit } from '@/composables/useProfileEdit'
 
 // S08 プロフィール編集画面（画面設計書252〜273行目）。S04・S06・S10と同じく単機能画面のため
@@ -71,15 +72,12 @@ async function handleSave() {
       <div class="form-field">
         <label>アイコン画像</label>
         <div class="profile-edit-avatar-row">
-          <img
-            v-if="profile.avatar_url"
-            :src="profile.avatar_url"
-            alt=""
-            class="profile-edit-avatar"
-            data-testid="profile-edit-avatar-image"
-          />
-          <div v-else class="profile-edit-avatar avatar-placeholder" aria-hidden="true"></div>
-          <label class="profile-edit-avatar-picker" data-testid="profile-edit-avatar-picker">
+          <AvatarIcon :src="profile.avatar_url" :size="64" testid="profile-edit-avatar-image" />
+          <label
+            class="profile-edit-avatar-picker"
+            :class="{ 'profile-edit-avatar-picker-disabled': avatarUpdating }"
+            data-testid="profile-edit-avatar-picker"
+          >
             画像を選択
             <input
               type="file"

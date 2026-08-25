@@ -112,7 +112,7 @@ class PostUpdateTests(APITestCase):
         create_post_image(self.post, image_url="https://example.com/2.jpg", display_order=1)
         self._login()
 
-        with patch("posts.views.delete_image") as mock_delete:
+        with patch("common.storage.delete_image") as mock_delete:
             response = self.client.put(
                 self._url(),
                 {"body": "1枚だけ残す", "keep_image_ids": str(image1.id)},
@@ -178,7 +178,7 @@ class PostUpdateTests(APITestCase):
 
         with (
             patch("posts.serializers.upload_image", side_effect=OSError),
-            patch("posts.views.delete_image") as mock_delete,
+            patch("common.storage.delete_image") as mock_delete,
         ):
             response = self.client.put(
                 self._url(),
@@ -231,7 +231,7 @@ class PostUpdateTests(APITestCase):
         )
         self._login()
 
-        with patch("posts.views.delete_image", side_effect=[OSError, None]) as mock_delete:
+        with patch("common.storage.delete_image", side_effect=[OSError, None]) as mock_delete:
             response = self.client.put(
                 self._url(), {"body": "画像を全部消す", "keep_image_ids": ""}, format="multipart"
             )

@@ -5,6 +5,7 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import { apiClient } from '@/lib/apiClient'
 import { useAuthStore } from '@/stores/auth'
 import ProfileEditView from './ProfileEditView.vue'
+import type { Profile } from '@/types/profile'
 
 vi.mock('@/lib/apiClient', () => ({
   apiClient: { get: vi.fn(), put: vi.fn(), post: vi.fn(), delete: vi.fn() },
@@ -66,6 +67,16 @@ describe('ProfileEditView', () => {
     await waitFor(() => {
       expect(screen.getByTestId('profile-edit-bio')).toHaveValue('よろしく')
     })
+  })
+
+  it('プロフィールの取得に失敗した場合はエラーメッセージを表示する', async () => {
+    vi.mocked(apiClient.get).mockRejectedValueOnce(new Error('network error'))
+    await renderProfileEditView()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('profile-edit-load-error')).toBeInTheDocument()
+    })
+    expect(screen.queryByTestId('profile-edit-bio')).not.toBeInTheDocument()
   })
 
   it('自分以外のidで開いた場合はプロフィール画面へリダイレクトする', async () => {
@@ -144,6 +155,37 @@ describe('ProfileEditView', () => {
       expect(screen.getByTestId('profile-edit-avatar-image')).toHaveAttribute(
         'src',
         'https://example.com/new.jpg',
+      )
+    })
+  })
+
+  it('アップロード中は「画像を選択」もbutton同様に見た目で無効化される（labelは:disabledと一致しないため、専用クラスで表現する）', async () => {
+    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: profile })
+    await renderProfileEditView()
+    await waitFor(() => expect(screen.getByTestId('profile-edit-avatar-input')).toBeInTheDocument())
+
+    let resolveUpload!: (value: { data: Profile }) => void
+    vi.mocked(apiClient.post).mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveUpload = resolve
+      }),
+    )
+    const file = new File([new Uint8Array(10)], 'avatar.jpg', { type: 'image/jpeg' })
+    await fireEvent.change(screen.getByTestId('profile-edit-avatar-input'), {
+      target: { files: [file] },
+    })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('profile-edit-avatar-picker')).toHaveClass(
+        'profile-edit-avatar-picker-disabled',
+      )
+    })
+
+    resolveUpload({ data: { ...profile, avatar_url: 'https://example.com/new.jpg' } })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('profile-edit-avatar-picker')).not.toHaveClass(
+        'profile-edit-avatar-picker-disabled',
       )
     })
   })
