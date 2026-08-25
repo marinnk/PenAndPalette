@@ -14,11 +14,11 @@ export function useUserSearch() {
   const hasSearched = ref(false)
 
   async function search() {
+    error.value = false
     const trimmed = keyword.value.trim()
     if (!trimmed) return
     hasSearched.value = true
     loading.value = true
-    error.value = false
     try {
       const { data } = await apiClient.get<AuthUser[]>('/api/users/', { params: { q: trimmed } })
       users.value = data

@@ -16,7 +16,14 @@ const { keyword, users, loading, error, hasSearched, search } = useUserSearch()
 
       <form class="user-search-form" @submit.prevent="search">
         <input v-model="keyword" type="text" data-testid="user-search-keyword" />
-        <button type="submit" class="form-submit" data-testid="user-search-submit">検索</button>
+        <button
+          type="submit"
+          class="form-submit"
+          :disabled="loading"
+          data-testid="user-search-submit"
+        >
+          検索
+        </button>
       </form>
 
       <p v-if="loading" data-testid="user-search-loading">読み込み中...</p>

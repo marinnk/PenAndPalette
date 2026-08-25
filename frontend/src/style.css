@@ -300,7 +300,8 @@ code {
   font-size: 15px;
 }
 
-.form-field input {
+.form-field input,
+.user-search-form input {
   box-sizing: border-box;
   width: 100%;
   padding: 10px 12px;
@@ -311,7 +312,8 @@ code {
   font: inherit;
 }
 
-.form-field input:focus-visible {
+.form-field input:focus-visible,
+.user-search-form input:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
@@ -909,16 +911,11 @@ code {
   margin-bottom: 16px;
 }
 
-/* 入力欄は.form-field inputと同じ見た目で、横並びレイアウトのぶんだけ上書きする */
+/* 入力欄の見た目は.form-field inputと共有し（上のセレクタに含めている）、
+   横並びレイアウト用にwidth:100%だけ打ち消す */
 .user-search-form input {
   flex: 1;
-  box-sizing: border-box;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--text-h);
-  background: var(--bg);
-  font: inherit;
+  width: auto;
 }
 
 /* ボタン自体は.form-submitを共用し、横並びレイアウト用にwidth:100%だけ打ち消す

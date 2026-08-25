@@ -104,6 +104,38 @@ describe('UserSearchView', () => {
     })
   })
 
+  it('検索に失敗した後、キーワードを空にして検索し直すとエラーメッセージが消える', async () => {
+    vi.mocked(apiClient.get).mockImplementation((url: string) => {
+      if (url === '/api/users/') return Promise.reject(new Error('failed'))
+      return Promise.resolve({ data: [] })
+    })
+    renderUserSearchView()
+    await typeKeyword('太郎')
+    await waitFor(() => expect(screen.getByTestId('user-search-error')).toBeInTheDocument())
+
+    await fireEvent.update(screen.getByTestId('user-search-keyword'), '')
+    await fireEvent.click(screen.getByTestId('user-search-submit'))
+
+    expect(screen.queryByTestId('user-search-error')).not.toBeInTheDocument()
+  })
+
+  it('検索中は検索ボタンが無効化される', async () => {
+    let resolveSearch: (value: { data: unknown[] }) => void = () => {}
+    vi.mocked(apiClient.get).mockImplementation((url: string) => {
+      if (url === '/api/users/') return new Promise((resolve) => (resolveSearch = resolve))
+      return Promise.resolve({ data: [] })
+    })
+    renderUserSearchView()
+
+    await fireEvent.update(screen.getByTestId('user-search-keyword'), '太郎')
+    await fireEvent.click(screen.getByTestId('user-search-submit'))
+
+    await waitFor(() => expect(screen.getByTestId('user-search-submit')).toBeDisabled())
+
+    resolveSearch({ data: [] })
+    await waitFor(() => expect(screen.getByTestId('user-search-submit')).not.toBeDisabled())
+  })
+
   it('検索結果をクリックするとプロフィール画面へ遷移する', async () => {
     vi.mocked(apiClient.get).mockImplementation((url: string) => {
       if (url === '/api/users/') {
