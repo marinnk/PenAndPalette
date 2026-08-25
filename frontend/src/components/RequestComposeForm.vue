@@ -1,84 +1,39 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { apiClient } from '@/lib/apiClient'
 import PostCard from '@/components/PostCard.vue'
-import { useAuthStore } from '@/stores/auth'
-import type { Post, PostListResponse } from '@/types/post'
+import type { Post } from '@/types/post'
+import type { PickerTab } from '@/composables/useRequestRelatedPostPicker'
 
-// S06 リクエスト作成画面。PostComposeForm.vueと同じprops/emit構成の表示コンポーネントだが、
-// 「参考にしてほしい投稿」欄だけは例外的にこのコンポーネント内で完結する（自分・相手の
-// 投稿一覧を取得して選ばせる）ローカルなpicker状態を持つ。PostCard.vueが自分でuseAuthStore()を
-// 呼ぶのと同じ理由で、このコンポーネントも自分でapiClient/useAuthStoreを使う
-const props = withDefaults(
+// S06 リクエスト作成画面。PostComposeForm.vueと同じprops/emit構成の純粋な表示コンポーネント。
+// 「参考にしてほしい投稿」pickerの状態・データ取得はRequestCreateView.vueが
+// useRequestRelatedPostPicker（composable）経由で持ち、ここはpropsで受け取って
+// 表示するだけに専念する（APIとの通信はcomponentではなくcomposableに分離するという
+// プロジェクトの規約に合わせるため）
+withDefaults(
   defineProps<{
-    toUserId: number
     toDisplayName: string
     message: string
-    relatedPostId: string
     submitting: boolean
     errorMessage?: string | null
     fieldErrors: Record<string, string[]>
+    selectedPost: Post | null
+    pickerOpen: boolean
+    pickerTab: PickerTab
+    pickerLoading: boolean
+    pickerError: string | null
+    pickerPosts: Post[]
   }>(),
   { errorMessage: null },
 )
 const emit = defineEmits<{
   'update:message': [value: string]
-  'update:relatedPostId': [value: string]
   submit: []
   cancel: []
+  'open-picker': []
+  'close-picker': []
+  'switch-tab': [tab: PickerTab]
+  'select-post': [post: Post]
+  'clear-selection': []
 }>()
-
-const auth = useAuthStore()
-
-type PickerTab = 'own' | 'target'
-
-const selectedPost = ref<Post | null>(null)
-const pickerOpen = ref(false)
-const pickerTab = ref<PickerTab>('own')
-const pickerLoading = ref(false)
-const pickerError = ref<string | null>(null)
-// タブ切り替えのたびに再取得しないよう、取得済みの一覧をタブごとにキャッシュしておく
-const pickerPostsByTab: Record<PickerTab, Post[] | null> = { own: null, target: null }
-
-async function loadTab(tab: PickerTab) {
-  const userId = tab === 'own' ? auth.currentUser?.id : props.toUserId
-  if (!userId) return
-  if (pickerPostsByTab[tab]) return
-
-  pickerLoading.value = true
-  pickerError.value = null
-  try {
-    const { data } = await apiClient.get<PostListResponse>('/api/posts', {
-      params: { user_id: userId },
-    })
-    pickerPostsByTab[tab] = data.results
-  } catch {
-    pickerError.value = '投稿一覧の取得に失敗しました。'
-  } finally {
-    pickerLoading.value = false
-  }
-}
-
-function openPicker() {
-  pickerOpen.value = true
-  loadTab(pickerTab.value)
-}
-
-function switchTab(tab: PickerTab) {
-  pickerTab.value = tab
-  loadTab(tab)
-}
-
-function selectPost(post: Post) {
-  selectedPost.value = post
-  pickerOpen.value = false
-  emit('update:relatedPostId', String(post.id))
-}
-
-function clearSelection() {
-  selectedPost.value = null
-  emit('update:relatedPostId', '')
-}
 </script>
 
 <template>
@@ -112,8 +67,12 @@ function clearSelection() {
         <label>参考にしてほしい投稿（任意）</label>
 
         <div v-if="selectedPost" class="request-related-post-selected">
-          <PostCard :post="selectedPost" :clickable="false" />
-          <button type="button" data-testid="request-related-post-clear" @click="clearSelection">
+          <PostCard :post="selectedPost" :clickable="false" preview />
+          <button
+            type="button"
+            data-testid="request-related-post-clear"
+            @click="emit('clear-selection')"
+          >
             選択を解除する
           </button>
         </div>
@@ -121,7 +80,7 @@ function clearSelection() {
           v-else
           type="button"
           data-testid="request-related-post-picker-toggle"
-          @click="openPicker"
+          @click="emit('open-picker')"
         >
           投稿を選ぶ
         </button>
@@ -132,7 +91,7 @@ function clearSelection() {
               type="button"
               :aria-pressed="pickerTab === 'own'"
               data-testid="request-related-post-tab-own"
-              @click="switchTab('own')"
+              @click="emit('switch-tab', 'own')"
             >
               自分の投稿
             </button>
@@ -140,7 +99,7 @@ function clearSelection() {
               type="button"
               :aria-pressed="pickerTab === 'target'"
               data-testid="request-related-post-tab-target"
-              @click="switchTab('target')"
+              @click="emit('switch-tab', 'target')"
             >
               {{ toDisplayName }}の投稿
             </button>
@@ -152,19 +111,19 @@ function clearSelection() {
           <p v-else-if="pickerError" class="field-error">{{ pickerError }}</p>
           <template v-else>
             <p
-              v-if="(pickerPostsByTab[pickerTab] ?? []).length === 0"
+              v-if="pickerPosts.length === 0"
               class="empty-state"
               data-testid="request-related-post-picker-empty"
             >
               投稿がありません。
             </p>
             <button
-              v-for="post in pickerPostsByTab[pickerTab] ?? []"
+              v-for="post in pickerPosts"
               :key="post.id"
               type="button"
               class="request-related-post-option"
               :data-testid="`request-related-post-option-${post.id}`"
-              @click="selectPost(post)"
+              @click="emit('select-post', post)"
             >
               <span class="request-related-post-option-body">{{ post.body || '(本文なし)' }}</span>
               <span class="request-related-post-option-date">{{
@@ -176,7 +135,7 @@ function clearSelection() {
           <button
             type="button"
             data-testid="request-related-post-picker-close"
-            @click="pickerOpen = false"
+            @click="emit('close-picker')"
           >
             閉じる
           </button>

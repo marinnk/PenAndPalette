@@ -1,27 +1,24 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/vue'
+import { describe, expect, it } from 'vitest'
+import { fireEvent, render, screen } from '@testing-library/vue'
 import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
-import { apiClient } from '@/lib/apiClient'
 import { useAuthStore } from '@/stores/auth'
 import RequestComposeForm from './RequestComposeForm.vue'
 
-// PostCard（選択した参考投稿のプレビューで使う）がuseRouter/useAuthStoreに依存し、
-// このコンポーネント自体も参考投稿pickerのためにuseAuthStore・apiClientへ依存するため、
-// ProfileView.test.tsと同様にrouter・piniaをglobal pluginsとして渡す
-vi.mock('@/lib/apiClient', () => ({
-  apiClient: { get: vi.fn() },
-}))
-
+// 選択済み投稿のプレビューでPostCard.vueを使うため、useAuthStore/useRouterのpluginsが必要
 function baseProps(overrides: Record<string, unknown> = {}) {
   return {
-    toUserId: 2,
     toDisplayName: 'ユーザーB',
     message: '',
-    relatedPostId: '',
     submitting: false,
     errorMessage: null,
     fieldErrors: {},
+    selectedPost: null,
+    pickerOpen: false,
+    pickerTab: 'own' as const,
+    pickerLoading: false,
+    pickerError: null,
+    pickerPosts: [],
     ...overrides,
   }
 }
@@ -62,10 +59,6 @@ function makePost(id: number, overrides: Record<string, unknown> = {}) {
     ...overrides,
   }
 }
-
-beforeEach(() => {
-  vi.mocked(apiClient.get).mockReset()
-})
 
 describe('RequestComposeForm', () => {
   it('宛先の表示名を見出しに表示する', () => {
@@ -118,71 +111,96 @@ describe('RequestComposeForm', () => {
     expect(screen.getByTestId('request-message-error')).toHaveTextContent('この項目は必須です。')
   })
 
-  it('「投稿を選ぶ」を押すと自分の投稿一覧（デフォルトタブ）が表示される', async () => {
-    vi.mocked(apiClient.get).mockResolvedValueOnce({
-      data: { results: [makePost(10)], has_more: false },
-    })
-    renderForm()
+  it('selectedPostが無い場合は「投稿を選ぶ」ボタンを表示する', () => {
+    renderForm({ selectedPost: null })
 
-    await fireEvent.click(screen.getByTestId('request-related-post-picker-toggle'))
-
-    await waitFor(() => {
-      expect(apiClient.get).toHaveBeenCalledWith('/api/posts', { params: { user_id: 1 } })
-      expect(screen.getByTestId('request-related-post-option-10')).toHaveTextContent('投稿10')
-    })
+    expect(screen.getByTestId('request-related-post-picker-toggle')).toBeInTheDocument()
   })
 
-  it('「{相手}の投稿」タブに切り替えると相手の投稿一覧を取得する', async () => {
-    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: { results: [], has_more: false } })
-    vi.mocked(apiClient.get).mockResolvedValueOnce({
-      data: { results: [makePost(20)], has_more: false },
-    })
-    renderForm()
+  it('「投稿を選ぶ」を押すとopen-pickerをemitする', async () => {
+    const { emitted } = renderForm()
+
     await fireEvent.click(screen.getByTestId('request-related-post-picker-toggle'))
-    await waitFor(() =>
-      expect(screen.getByTestId('request-related-post-picker-empty')).toBeInTheDocument(),
-    )
+
+    expect(emitted()['open-picker']).toHaveLength(1)
+  })
+
+  it('pickerOpen=trueのときタブと一覧を表示する', () => {
+    renderForm({
+      pickerOpen: true,
+      pickerPosts: [makePost(10)],
+    })
+
+    expect(screen.getByTestId('request-related-post-tab-own')).toBeInTheDocument()
+    expect(screen.getByTestId('request-related-post-tab-target')).toBeInTheDocument()
+    expect(screen.getByTestId('request-related-post-option-10')).toHaveTextContent('投稿10')
+  })
+
+  it('タブクリックでswitch-tabをemitする', async () => {
+    const { emitted } = renderForm({ pickerOpen: true })
 
     await fireEvent.click(screen.getByTestId('request-related-post-tab-target'))
 
-    await waitFor(() => {
-      expect(apiClient.get).toHaveBeenCalledWith('/api/posts', { params: { user_id: 2 } })
-      expect(screen.getByTestId('request-related-post-option-20')).toBeInTheDocument()
-    })
+    expect(emitted()['switch-tab']).toEqual([['target']])
   })
 
-  it('一覧から投稿を選ぶとupdate:relatedPostIdをemitし、選択した投稿をプレビュー表示する', async () => {
-    vi.mocked(apiClient.get).mockResolvedValueOnce({
-      data: { results: [makePost(10, { body: '参考にしてほしい投稿' })], has_more: false },
-    })
-    const { emitted } = renderForm()
-    await fireEvent.click(screen.getByTestId('request-related-post-picker-toggle'))
-    await waitFor(() =>
-      expect(screen.getByTestId('request-related-post-option-10')).toBeInTheDocument(),
-    )
+  it('一覧から投稿を選ぶとselect-postをemitする', async () => {
+    const post = makePost(10)
+    const { emitted } = renderForm({ pickerOpen: true, pickerPosts: [post] })
 
     await fireEvent.click(screen.getByTestId('request-related-post-option-10'))
 
-    expect(emitted()['update:relatedPostId']).toEqual([['10']])
+    expect(emitted()['select-post']).toEqual([[post]])
+  })
+
+  it('pickerLoading=trueのとき読み込み中を表示する', () => {
+    renderForm({ pickerOpen: true, pickerLoading: true })
+
+    expect(screen.getByTestId('request-related-post-picker-loading')).toBeInTheDocument()
+  })
+
+  it('pickerError指定時はエラーメッセージを表示する', () => {
+    renderForm({ pickerOpen: true, pickerError: '投稿一覧の取得に失敗しました。' })
+
+    expect(screen.getByText('投稿一覧の取得に失敗しました。')).toBeInTheDocument()
+  })
+
+  it('pickerPostsが空の場合は空状態を表示する', () => {
+    renderForm({ pickerOpen: true, pickerPosts: [] })
+
+    expect(screen.getByTestId('request-related-post-picker-empty')).toBeInTheDocument()
+  })
+
+  it('閉じるボタンでclose-pickerをemitする', async () => {
+    const { emitted } = renderForm({ pickerOpen: true })
+
+    await fireEvent.click(screen.getByTestId('request-related-post-picker-close'))
+
+    expect(emitted()['close-picker']).toHaveLength(1)
+  })
+
+  it('selectedPostがある場合はプレビューを表示し、「投稿を選ぶ」ボタンは表示しない', () => {
+    renderForm({ selectedPost: makePost(10, { body: '参考にしてほしい投稿' }) })
+
     expect(screen.getByText('参考にしてほしい投稿')).toBeInTheDocument()
     expect(screen.queryByTestId('request-related-post-picker-toggle')).not.toBeInTheDocument()
   })
 
-  it('選択を解除するとupdate:relatedPostIdに空文字をemitし、再度「投稿を選ぶ」を表示する', async () => {
-    vi.mocked(apiClient.get).mockResolvedValueOnce({
-      data: { results: [makePost(10)], has_more: false },
-    })
-    const { emitted } = renderForm()
-    await fireEvent.click(screen.getByTestId('request-related-post-picker-toggle'))
-    await waitFor(() =>
-      expect(screen.getByTestId('request-related-post-option-10')).toBeInTheDocument(),
-    )
-    await fireEvent.click(screen.getByTestId('request-related-post-option-10'))
+  it('選択を解除するとclear-selectionをemitする', async () => {
+    const { emitted } = renderForm({ selectedPost: makePost(10) })
 
     await fireEvent.click(screen.getByTestId('request-related-post-clear'))
 
-    expect(emitted()['update:relatedPostId'][1]).toEqual([''])
-    expect(screen.getByTestId('request-related-post-picker-toggle')).toBeInTheDocument()
+    expect(emitted()['clear-selection']).toHaveLength(1)
+  })
+
+  it('選択済み投稿のプレビューは編集・削除・いいね等のアクションを表示しない', () => {
+    // selectedPost.author.id=2、ログイン中利用者id=1なので自分の投稿ではないが、
+    // preview propによりそもそもアクション自体を表示しないことを確認する
+    renderForm({ selectedPost: makePost(10) })
+
+    expect(screen.queryByTestId('like-button-10')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('edit-button-10')).not.toBeInTheDocument()
   })
 
   it('fieldErrors.related_post_idを表示する', () => {

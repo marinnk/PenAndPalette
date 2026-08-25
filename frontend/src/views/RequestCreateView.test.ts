@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/vue'
 import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { apiClient } from '@/lib/apiClient'
+import { useAuthStore } from '@/stores/auth'
 import RequestCreateView from './RequestCreateView.vue'
 
 vi.mock('@/lib/apiClient', () => ({
@@ -22,9 +23,30 @@ const destinationProfile = {
   followed_by_me: false,
 }
 
-async function renderView() {
+function makePost(id: number, overrides: Record<string, unknown> = {}) {
+  return {
+    id,
+    author: { id: 2, username: 'jiro', display_name: '次郎', avatar_url: null },
+    body: `投稿${id}`,
+    images: [],
+    image_ids: [],
+    like_count: 0,
+    want_count: 0,
+    comment_count: 0,
+    liked_by_me: false,
+    wanted_by_me: false,
+    created_at: '2026-08-24T00:00:00Z',
+    updated_at: '2026-08-24T00:00:00Z',
+    ...overrides,
+  }
+}
+
+async function renderView(currentUserId = 1) {
   const pinia = createPinia()
   setActivePinia(pinia)
+  const auth = useAuthStore()
+  auth.currentUser = { id: currentUserId, username: 'taro', display_name: '太郎', avatar_url: null }
+
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
@@ -120,6 +142,54 @@ describe('RequestCreateView', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('request-create-error')).toBeInTheDocument()
+    })
+  })
+
+  it('「投稿を選ぶ」→「自分の投稿」タブで自分のuser_idの投稿一覧を取得する', async () => {
+    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: destinationProfile })
+    vi.mocked(apiClient.get).mockResolvedValueOnce({
+      data: {
+        results: [
+          makePost(10, {
+            author: { id: 1, username: 'taro', display_name: '太郎', avatar_url: null },
+          }),
+        ],
+        has_more: false,
+      },
+    })
+    await renderView(1)
+    await waitFor(() => expect(screen.getByTestId('request-message')).toBeInTheDocument())
+
+    await fireEvent.click(screen.getByTestId('request-related-post-picker-toggle'))
+
+    await waitFor(() => {
+      expect(apiClient.get).toHaveBeenCalledWith('/api/posts', { params: { user_id: 1 } })
+      expect(screen.getByTestId('request-related-post-option-10')).toBeInTheDocument()
+    })
+  })
+
+  it('一覧から投稿を選んで送信すると related_post_id が送信される', async () => {
+    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: destinationProfile })
+    vi.mocked(apiClient.get).mockResolvedValueOnce({
+      data: { results: [makePost(10)], has_more: false },
+    })
+    vi.mocked(apiClient.post).mockResolvedValueOnce({ data: { id: 1 } })
+    await renderView(1)
+    await waitFor(() => expect(screen.getByTestId('request-message')).toBeInTheDocument())
+    await fireEvent.click(screen.getByTestId('request-related-post-picker-toggle'))
+    await waitFor(() =>
+      expect(screen.getByTestId('request-related-post-option-10')).toBeInTheDocument(),
+    )
+    await fireEvent.click(screen.getByTestId('request-related-post-option-10'))
+    await fireEvent.update(screen.getByTestId('request-message'), 'この投稿の続きが読みたいです')
+
+    await fireEvent.click(screen.getByTestId('request-compose-submit'))
+
+    await waitFor(() => {
+      expect(apiClient.post).toHaveBeenCalledWith('/api/users/2/requests', {
+        message: 'この投稿の続きが読みたいです',
+        related_post_id: 10,
+      })
     })
   })
 })
