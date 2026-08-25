@@ -13,6 +13,7 @@ vi.mock('@/lib/apiClient', () => ({
 const TimelineStub = { template: '<div>timeline</div>' }
 const ProfileStub = { template: '<div>profile</div>' }
 const LoginStub = { template: '<div>login</div>' }
+const SearchStub = { template: '<div>search</div>' }
 
 function renderAppHeader(avatarUrl: string | null = null) {
   const pinia = createPinia()
@@ -26,6 +27,7 @@ function renderAppHeader(avatarUrl: string | null = null) {
       { path: '/', name: 'timeline', component: TimelineStub },
       { path: '/profile/:id', name: 'profile', component: ProfileStub },
       { path: '/login', name: 'login', component: LoginStub },
+      { path: '/search', name: 'user-search', component: SearchStub },
     ],
   })
   const result = render(AppHeader, { global: { plugins: [pinia, router] } })
@@ -50,6 +52,17 @@ describe('AppHeader', () => {
     await waitFor(() => {
       expect(router.currentRoute.value.name).toBe('profile')
       expect(router.currentRoute.value.params.id).toBe('1')
+    })
+  })
+
+  it('検索リンクから検索画面へ遷移する', async () => {
+    const { router } = renderAppHeader()
+    await router.isReady()
+
+    await fireEvent.click(screen.getByTestId('header-search-link'))
+
+    await waitFor(() => {
+      expect(router.currentRoute.value.name).toBe('user-search')
     })
   })
 

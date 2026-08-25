@@ -750,17 +750,6 @@ code {
   padding: 24px 16px 64px;
 }
 
-.post-detail > button {
-  display: block;
-  margin-bottom: 16px;
-  border: none;
-  background: transparent;
-  color: var(--accent);
-  font: inherit;
-  cursor: pointer;
-  padding: 0;
-}
-
 /* S06 リクエスト作成画面: 参考にしてほしい投稿のpicker */
 .request-related-post-picker {
   border: 1px solid var(--border);
@@ -862,17 +851,6 @@ code {
   padding: 24px 16px 64px;
 }
 
-.follow-list > button {
-  display: block;
-  margin-bottom: 16px;
-  border: none;
-  background: transparent;
-  color: var(--accent);
-  font: inherit;
-  cursor: pointer;
-  padding: 0;
-}
-
 .follow-list-tabs {
   display: flex;
   gap: 8px;
@@ -894,7 +872,9 @@ code {
   color: #fff;
 }
 
-.follow-list-item {
+/* 一覧の1行（アイコン・名前 → プロフィールへのリンク）。S09ユーザー検索・S10フォロー一覧で共通 */
+.follow-list-item,
+.user-search-item {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -902,6 +882,49 @@ code {
   border-bottom: 1px solid var(--border);
   color: var(--text-h);
   text-decoration: none;
+}
+
+/* 各画面の「← ○○に戻る」ボタン（components/BackLink.vue）。S05・S09・S10で共通利用 */
+.back-link {
+  display: block;
+  margin-bottom: 16px;
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+
+/* S09 ユーザー検索画面 */
+.user-search {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 24px 16px 64px;
+}
+
+.user-search-form {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+/* 入力欄は.form-field inputと同じ見た目で、横並びレイアウトのぶんだけ上書きする */
+.user-search-form input {
+  flex: 1;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-h);
+  background: var(--bg);
+  font: inherit;
+}
+
+/* ボタン自体は.form-submitを共用し、横並びレイアウト用にwidth:100%だけ打ち消す
+   （.profile-header-actions .form-submitと同じ上書きの仕方） */
+.user-search-form .form-submit {
+  width: auto;
 }
 
 /* S08 プロフィール編集画面 */

@@ -7,6 +7,7 @@ import ProfileView from '@/views/ProfileView.vue'
 import ProfileEditView from '@/views/ProfileEditView.vue'
 import RequestCreateView from '@/views/RequestCreateView.vue'
 import FollowListView from '@/views/FollowListView.vue'
+import UserSearchView from '@/views/UserSearchView.vue'
 import LoginView from '@/views/LoginView.vue'
 import RegisterView from '@/views/RegisterView.vue'
 import { useAuthStore } from '@/stores/auth'
@@ -20,10 +21,10 @@ declare module 'vue-router' {
   }
 }
 
-// 画面設計書のS09（ユーザー検索）は今後実装するIssueで追加する。
 // 今回実装するのはS01（ログイン）・S02（新規登録）・S03（タイムライン）・
 // S04（投稿作成、スタブ）・S05（投稿詳細、スタブ）・S06（リクエスト作成）・
-// S07（プロフィール）・S08（プロフィール編集）・S10（フォロー中／フォロワー一覧）
+// S07（プロフィール）・S08（プロフィール編集）・S09（ユーザー検索）・
+// S10（フォロー中／フォロワー一覧）
 export const router = createRouter({
   history: createWebHistory(),
   routes: [
@@ -56,6 +57,7 @@ export const router = createRouter({
       component: FollowListView,
       props: (route) => ({ id: route.params.id, tab: 'followers' }),
     },
+    { path: '/search', name: 'user-search', component: UserSearchView },
     { path: '/login', name: 'login', component: LoginView, meta: { guestOnly: true } },
     { path: '/register', name: 'register', component: RegisterView, meta: { guestOnly: true } },
   ],

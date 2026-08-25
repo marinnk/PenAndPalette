@@ -2,6 +2,7 @@
 import { onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import AppHeader from '@/components/AppHeader.vue'
+import BackLink from '@/components/BackLink.vue'
 import PostCard from '@/components/PostCard.vue'
 import { usePostDetail } from '@/composables/usePostDetail'
 
@@ -42,13 +43,7 @@ watch(
   <div>
     <AppHeader />
     <main class="post-detail">
-      <button
-        type="button"
-        data-testid="back-to-timeline"
-        @click="router.push({ name: 'timeline' })"
-      >
-        ← タイムラインに戻る
-      </button>
+      <BackLink :to="{ name: 'timeline' }" label="← タイムラインに戻る" testid="back-to-timeline" />
 
       <p v-if="loading" data-testid="post-detail-loading">読み込み中...</p>
       <p v-else-if="error || !post" class="field-error" data-testid="post-detail-error">

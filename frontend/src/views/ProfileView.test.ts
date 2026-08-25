@@ -16,6 +16,7 @@ const PostDetailStub = { template: '<div>post-detail</div>' }
 const FollowListStub = { template: '<div>follow-list</div>' }
 const RequestCreateStub = { template: '<div>request-create</div>' }
 const ProfileEditStub = { template: '<div>profile-edit</div>' }
+const SearchStub = { template: '<div>search</div>' }
 
 const profile = {
   id: 1,
@@ -83,6 +84,7 @@ function renderProfileView(currentUserId: number) {
       },
       { path: '/profile/:id/following', name: 'profile-following', component: FollowListStub },
       { path: '/profile/:id/followers', name: 'profile-followers', component: FollowListStub },
+      { path: '/search', name: 'user-search', component: SearchStub },
     ],
   })
   router.push({ name: 'profile', params: { id: '1' } })
