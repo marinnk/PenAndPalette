@@ -33,7 +33,9 @@ function renderAppHeader() {
 }
 
 beforeEach(() => {
+  vi.mocked(apiClient.get).mockReset()
   vi.mocked(apiClient.post).mockReset()
+  vi.mocked(apiClient.get).mockResolvedValue({ data: [] })
 })
 
 describe('AppHeader', () => {
@@ -62,5 +64,61 @@ describe('AppHeader', () => {
       expect(auth.currentUser).toBeNull()
       expect(router.currentRoute.value.name).toBe('login')
     })
+  })
+
+  it('届いたリクエストが無い場合は通知バッジを表示しない', async () => {
+    vi.mocked(apiClient.get).mockResolvedValue({ data: [] })
+    renderAppHeader()
+
+    await waitFor(() => {
+      expect(apiClient.get).toHaveBeenCalledWith('/api/requests/received')
+    })
+    expect(screen.queryByTestId('header-request-badge')).not.toBeInTheDocument()
+  })
+
+  it('届いたリクエストがある場合は名前の横に件数付きの通知バッジを表示する', async () => {
+    vi.mocked(apiClient.get).mockResolvedValue({
+      data: [
+        {
+          id: 1,
+          from_user: { id: 2, username: 'jiro', display_name: '次郎', avatar_url: null },
+          related_post: null,
+          message: 'こんにちは',
+          created_at: '2026-08-24T00:00:00Z',
+        },
+      ],
+    })
+    renderAppHeader()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('header-request-badge')).toHaveTextContent('届いたリクエスト 1')
+    })
+  })
+
+  it('通知バッジをクリックすると届いたリクエストの一覧がドロップダウンで表示される', async () => {
+    vi.mocked(apiClient.get).mockResolvedValue({
+      data: [
+        {
+          id: 1,
+          from_user: { id: 2, username: 'jiro', display_name: '次郎', avatar_url: null },
+          related_post: null,
+          message: 'この場面の続きを書いてほしいです',
+          created_at: '2026-08-24T00:00:00Z',
+        },
+      ],
+    })
+    renderAppHeader()
+    await waitFor(() => expect(screen.getByTestId('header-request-badge')).toBeInTheDocument())
+    expect(screen.queryByTestId('header-request-dropdown')).not.toBeInTheDocument()
+
+    await fireEvent.click(screen.getByTestId('header-request-badge'))
+
+    expect(screen.getByTestId('header-received-request-1')).toHaveTextContent(
+      '次郎 さんから：「この場面の続きを書いてほしいです」',
+    )
+
+    await fireEvent.click(screen.getByTestId('header-request-badge'))
+
+    expect(screen.queryByTestId('header-request-dropdown')).not.toBeInTheDocument()
   })
 })

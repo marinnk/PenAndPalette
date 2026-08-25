@@ -6,7 +6,8 @@ import PostCard from '@/components/PostCard.vue'
 import { useProfile } from '@/composables/useProfile'
 import { useAuthStore } from '@/stores/auth'
 
-// S07 プロフィール画面
+// S07 プロフィール画面。届いたリクエストの確認はヘッダーの通知バッジ
+// （components/AppHeader.vue）から行うため、この画面自体には持たない
 const props = defineProps<{ id: string }>()
 const router = useRouter()
 const auth = useAuthStore()
@@ -76,16 +77,25 @@ watch(
           >
             投稿する
           </button>
-          <button
-            v-else
-            type="button"
-            class="form-submit"
-            data-testid="profile-follow-button"
-            :disabled="followPending"
-            @click="toggleFollow"
-          >
-            {{ profile.followed_by_me ? 'フォロー中' : 'フォローする' }}
-          </button>
+          <div v-else class="profile-header-actions">
+            <button
+              type="button"
+              class="form-submit"
+              data-testid="profile-follow-button"
+              :disabled="followPending"
+              @click="toggleFollow"
+            >
+              {{ profile.followed_by_me ? 'フォロー中' : 'フォローする' }}
+            </button>
+            <button
+              type="button"
+              class="form-submit"
+              data-testid="profile-request-button"
+              @click="router.push({ name: 'request-create', params: { id: props.id } })"
+            >
+              リクエストする
+            </button>
+          </div>
         </div>
 
         <p v-if="followError" class="field-error" data-testid="follow-error">

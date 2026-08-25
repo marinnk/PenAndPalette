@@ -1,5 +1,7 @@
 from django.shortcuts import get_object_or_404
+from rest_framework import status
 from rest_framework.permissions import BasePermission
+from rest_framework.response import Response
 
 
 class IsOwner(BasePermission):
@@ -31,3 +33,21 @@ def get_owned_object_or_404(view, request, queryset, **kwargs):
     obj = get_object_or_404(queryset, **kwargs)
     view.check_object_permissions(request, obj)
     return obj
+
+
+def get_other_user_or_400(request, user_model, user_id, *, self_target_message):
+    """指定したuser_idの利用者をget_object_or_404で取得し、request.user自身を
+    指定していないか検証する共通実装（users.views.FollowView・
+    requests_app.views.UserRequestCreateViewの「自分自身は指定できない」チェック）。
+
+    自分自身を指定した場合はDBのCHECK制約でも防がれるが、制約違反による500ではなく
+    わかりやすい400を返すため、登録前にアプリケーション側でも判定する。戻り値は
+    (target, error_response)のタプルで、呼び出し側は次の形でそのまま使う：
+        target, error = get_other_user_or_400(request, User, user_id, self_target_message="...")
+        if error:
+            return error
+    """
+    target = get_object_or_404(user_model, pk=user_id)
+    if target.id == request.user.id:
+        return None, Response({"detail": self_target_message}, status=status.HTTP_400_BAD_REQUEST)
+    return target, None

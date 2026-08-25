@@ -156,7 +156,10 @@ code {
   width: 1126px;
   max-width: 100%;
   margin: 0 auto;
-  text-align: center;
+  /* Viteテンプレートの名残でtext-align: centerだったため、投稿一覧等の本文まで
+     中央寄せに巻き込まれていた。アプリの既定は左寄せにし、中央寄せにしたい要素
+     （.form-card h1等）は個別にtext-align: centerを指定する */
+  text-align: left;
   border-inline: 1px solid var(--border);
   min-height: 100svh;
   display: flex;
@@ -383,6 +386,49 @@ code {
   padding: 6px 12px;
   font: inherit;
   cursor: pointer;
+}
+
+/* F-6 リクエスト機能: ヘッダーの通知バッジ（届いたリクエストがある場合のみ表示）。
+   クリックすると届いたリクエストの一覧をドロップダウンで表示する */
+.app-header-requests {
+  position: relative;
+}
+
+.app-header-request-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--accent-bg);
+  color: var(--accent);
+  border: 1px solid var(--accent-border);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font: inherit;
+  font-size: 14px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.app-header-request-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 10;
+  width: max-content;
+  min-width: 260px;
+  max-width: 360px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 8px 16px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  text-align: left;
+}
+
+.app-header-request-dropdown .received-request-item:last-child {
+  border-bottom: none;
 }
 
 /* S03 タイムライン画面（画面設計書114〜145行目） */
@@ -688,6 +734,46 @@ code {
   padding: 0;
 }
 
+/* S06 リクエスト作成画面: 参考にしてほしい投稿のpicker */
+.request-related-post-picker {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px;
+  margin-top: 8px;
+}
+
+.request-related-post-option {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 0;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-h);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.request-related-post-option-body {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.request-related-post-option-date {
+  flex-shrink: 0;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.request-related-post-selected {
+  margin-top: 8px;
+}
+
 /* S07 プロフィール画面 */
 .profile {
   max-width: 640px;
@@ -717,6 +803,23 @@ code {
   font: inherit;
   cursor: pointer;
   padding: 0;
+}
+
+.profile-header-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.profile-header-actions .form-submit {
+  width: auto;
+  margin-top: 8px;
+}
+
+/* F-6 リクエスト機能: 届いたリクエスト1件分の表示（ヘッダーの通知ドロップダウンで使う） */
+.received-request-item {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-h);
 }
 
 /* S10 フォロー中／フォロワー一覧画面 */

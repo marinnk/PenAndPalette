@@ -5,6 +5,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from common.permissions import get_other_user_or_400
 from users.cookies import (
     REFRESH_COOKIE_NAME,
     clear_auth_cookies,
@@ -136,12 +137,11 @@ class FollowView(APIView):
     """
 
     def post(self, request, user_id):
-        target = get_object_or_404(User, pk=user_id)
-        if target.id == request.user.id:
-            return Response(
-                {"detail": "自分自身をフォローすることはできません。"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        target, error = get_other_user_or_400(
+            request, User, user_id, self_target_message="自分自身をフォローすることはできません。"
+        )
+        if error:
+            return error
         Follow.objects.add(request.user, target)
         return Response(
             FollowActionSerializer(_reload_with_follow_stats(user_id, request.user)).data

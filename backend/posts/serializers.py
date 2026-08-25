@@ -12,6 +12,14 @@ from users.serializers import UserSerializer
 MAX_POST_IMAGES = 4
 
 
+def _post_body_or_empty(post) -> str:
+    """画像のみの投稿はDB上body=NULLになりうるが、フロントエンドのPost.body型（string）を
+    変えずに済ませるため、レスポンスでは空文字に統一する（PostSerializer・
+    PostSummarySerializerのbodyフィールドで共通）。
+    """
+    return post.body or ""
+
+
 class PostSerializer(serializers.Serializer):
     """投稿一覧・詳細・作成直後のレスポンス共通のシリアライザ（基本設計書6.3章）。
 
@@ -35,9 +43,7 @@ class PostSerializer(serializers.Serializer):
     updated_at = serializers.DateTimeField(read_only=True)
 
     def get_body(self, obj):
-        # 画像のみの投稿はDB上body=NULLになりうるが、フロントエンドのPost.body型（string）を
-        # 変えずに済ませるため、レスポンスでは空文字に統一する
-        return obj.body or ""
+        return _post_body_or_empty(obj)
 
     def _resolve_images(self, obj):
         # 作成直後はPostCreateSerializer.create()で構築済みのリストを使い、DBへの再クエリを
@@ -60,6 +66,30 @@ class PostSerializer(serializers.Serializer):
     def get_comment_count(self, obj):
         # TODO(F-4 コメント機能): Commentモデル実装後、annotate()によるCount集計に置き換える
         return 0
+
+
+class PostSummarySerializer(serializers.Serializer):
+    """投稿の軽量な要約表示（基本設計書6.7章 F-6 リクエストのrelated_post埋め込み等で使う）。
+
+    PostSerializerと違いlike_count等のwith_reactions()によるannotateを前提にしないため、
+    Post.objects単体（select_related("user") + prefetch_related("images")のみ）から
+    シリアライズできる。
+    """
+
+    id = serializers.IntegerField(read_only=True)
+    author = UserSerializer(source="user", read_only=True)
+    body = serializers.SerializerMethodField()
+    image = serializers.SerializerMethodField()
+    created_at = serializers.DateTimeField(read_only=True)
+
+    def get_body(self, obj):
+        return _post_body_or_empty(obj)
+
+    def get_image(self, obj):
+        # 先頭1枚のURLのみ返す（一覧のサムネイル用途）。呼び出し側でprefetch_related("images")
+        # を付けている前提のため、ここでの.all()[:1]は追加クエリを発生させない
+        first = list(obj.images.all())[:1]
+        return first[0].image_url if first else None
 
 
 class LikeReactionSerializer(serializers.Serializer):

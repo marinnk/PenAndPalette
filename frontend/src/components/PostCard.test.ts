@@ -237,4 +237,33 @@ describe('PostCard', () => {
       vi.restoreAllMocks()
     })
   })
+
+  describe('preview=true（S06の参考投稿プレビュー用途）', () => {
+    it('自分の投稿でも編集・削除ボタンを表示しない', () => {
+      // currentUserId=7（=post.author.id）: previewが無ければ編集・削除が出る条件
+      renderPostCard({ preview: true, clickable: false }, 7)
+
+      expect(screen.queryByTestId('edit-button-42')).not.toBeInTheDocument()
+      expect(screen.queryByTestId('delete-button-42')).not.toBeInTheDocument()
+    })
+
+    it('いいね・かきたい・コメント数のアクション行を表示しない', () => {
+      renderPostCard({ preview: true, clickable: false })
+
+      expect(screen.queryByTestId('like-button-42')).not.toBeInTheDocument()
+      expect(screen.queryByTestId('want-button-42')).not.toBeInTheDocument()
+    })
+
+    it('投稿者名をリンクにせず、クリックしてもプロフィールへ遷移しない', async () => {
+      const { router } = renderPostCard({ preview: true, clickable: false })
+      await router.isReady()
+
+      expect(screen.queryByTestId('author-link-42')).not.toBeInTheDocument()
+      expect(screen.getByText('投稿者')).toBeInTheDocument()
+
+      await fireEvent.click(screen.getByText('投稿者'))
+
+      expect(router.currentRoute.value.name).toBe('timeline')
+    })
+  })
 })

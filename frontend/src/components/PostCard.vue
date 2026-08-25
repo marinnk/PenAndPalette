@@ -7,11 +7,20 @@ import type { Post } from '@/types/post'
 // S03/S05/S07で共通利用する投稿カード（画面設計書126〜133行目）。
 // いいね/かきたいのAPI呼び出しは持たず、親（TimelineView等）にemitで委ねる。
 // clickable=falseは投稿詳細画面（自分自身への遷移を避けるため）向け、
-// pending=trueはいいね/かきたいの処理中に連打で二重送信させないためのもの
-const props = withDefaults(defineProps<{ post: Post; clickable?: boolean; pending?: boolean }>(), {
-  clickable: true,
-  pending: false,
-})
+// pending=trueはいいね/かきたいの処理中に連打で二重送信させないためのもの。
+// preview=trueはS06（RequestComposeForm）の「参考にしてほしい投稿」プレビュー専用で、
+// 投稿者リンク・編集/削除・いいね/かきたいをすべて表示しない読み取り専用表示にする
+// （clickable=falseだけでは、投稿者が自分の投稿の場合に編集/削除ボタンが出てしまい、
+// 削除確認ダイアログの後に何も起きない・入力中の下書きを失って編集画面に飛ぶ、という
+// 誤操作を招くため）
+const props = withDefaults(
+  defineProps<{ post: Post; clickable?: boolean; pending?: boolean; preview?: boolean }>(),
+  {
+    clickable: true,
+    pending: false,
+    preview: false,
+  },
+)
 const emit = defineEmits<{
   'toggle-like': [post: Post]
   'toggle-want': [post: Post]
@@ -55,6 +64,7 @@ function onDeleteClick() {
   >
     <div class="post-card-header">
       <RouterLink
+        v-if="!preview"
         :to="{ name: 'profile', params: { id: post.author.id } }"
         class="post-card-author"
         :data-testid="`author-link-${post.id}`"
@@ -62,9 +72,10 @@ function onDeleteClick() {
       >
         {{ post.author.display_name }}
       </RouterLink>
+      <span v-else class="post-card-author">{{ post.author.display_name }}</span>
       <span class="post-card-header-right">
         <span class="post-card-meta">{{ formattedDate }}</span>
-        <span v-if="isOwnPost" class="post-card-author-actions">
+        <span v-if="isOwnPost && !preview" class="post-card-author-actions">
           <button
             type="button"
             :disabled="pending"
@@ -92,7 +103,7 @@ function onDeleteClick() {
     >
       <img v-for="(url, i) in post.images" :key="url" :src="url" :alt="`投稿画像${i + 1}`" />
     </div>
-    <div class="post-card-actions">
+    <div v-if="!preview" class="post-card-actions">
       <button
         type="button"
         :class="{ active: post.liked_by_me }"

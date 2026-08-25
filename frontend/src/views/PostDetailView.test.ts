@@ -33,6 +33,16 @@ const basePost = {
   updated_at: '2026-08-23T00:00:00Z',
 }
 
+// AppHeader（PostDetailViewが子コンポーネントとして描画する）がマウント時にGET
+// /api/requests/receivedを呼ぶため、単純な呼び出し順ベースのmockResolvedValueOnceだと
+// 投稿本体のGET /api/posts/{id}の応答と混線してしまう。URLで振り分けるmockImplementationにする
+function mockGet(handlePostsUrl: (url: string) => Promise<unknown>) {
+  vi.mocked(apiClient.get).mockImplementation((url: string) => {
+    if (url === '/api/requests/received') return Promise.resolve({ data: [] })
+    return handlePostsUrl(url)
+  })
+}
+
 async function renderPostDetailView(id = '1', currentUserId = 1) {
   const pinia = createPinia()
   setActivePinia(pinia)
@@ -60,7 +70,7 @@ beforeEach(() => {
 
 describe('PostDetailView', () => {
   it('マウント時に投稿を取得して表示する', async () => {
-    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: makePost() })
+    mockGet(() => Promise.resolve({ data: makePost() }))
     await renderPostDetailView()
 
     await waitFor(() => {
@@ -70,7 +80,7 @@ describe('PostDetailView', () => {
   })
 
   it('共通ヘッダーを表示する（ログアウト・自分のプロフィールへの導線を確保する）', async () => {
-    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: makePost() })
+    mockGet(() => Promise.resolve({ data: makePost() }))
     await renderPostDetailView()
 
     await waitFor(() => {
@@ -80,7 +90,7 @@ describe('PostDetailView', () => {
   })
 
   it('いいねボタンクリックで数値が更新される', async () => {
-    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: makePost() })
+    mockGet(() => Promise.resolve({ data: makePost() }))
     await renderPostDetailView()
     await waitFor(() => screen.getByText('投稿本文'))
 
@@ -95,7 +105,7 @@ describe('PostDetailView', () => {
   })
 
   it('いいねの更新に失敗した場合はエラーメッセージを表示する', async () => {
-    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: makePost() })
+    mockGet(() => Promise.resolve({ data: makePost() }))
     await renderPostDetailView()
     await waitFor(() => screen.getByText('投稿本文'))
 
@@ -108,7 +118,7 @@ describe('PostDetailView', () => {
   })
 
   it('見つからない投稿はエラーメッセージを表示する', async () => {
-    vi.mocked(apiClient.get).mockRejectedValueOnce(new Error('not found'))
+    mockGet(() => Promise.reject(new Error('not found')))
     await renderPostDetailView()
 
     await waitFor(() => {
@@ -117,7 +127,7 @@ describe('PostDetailView', () => {
   })
 
   it('「タイムラインに戻る」でタイムラインへ遷移する', async () => {
-    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: makePost() })
+    mockGet(() => Promise.resolve({ data: makePost() }))
     const { router } = await renderPostDetailView()
     await waitFor(() => screen.getByText('投稿本文'))
 
@@ -129,7 +139,7 @@ describe('PostDetailView', () => {
   })
 
   it('カード本体をクリックしても遷移しない（詳細画面自身への無駄な遷移を避ける）', async () => {
-    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: makePost() })
+    mockGet(() => Promise.resolve({ data: makePost() }))
     const { router } = await renderPostDetailView()
     await waitFor(() => screen.getByText('投稿本文'))
 
@@ -140,7 +150,7 @@ describe('PostDetailView', () => {
 
   it('自分の投稿の削除ボタン→確認後にタイムラインへ遷移する', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
-    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: makePost() })
+    mockGet(() => Promise.resolve({ data: makePost() }))
     const { router } = await renderPostDetailView('1', 7) // currentUser.id === post.author.id
     await waitFor(() => screen.getByText('投稿本文'))
 
@@ -156,7 +166,7 @@ describe('PostDetailView', () => {
 
   it('削除に失敗した場合はエラーメッセージを表示しタイムラインへ遷移しない', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
-    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: makePost() })
+    mockGet(() => Promise.resolve({ data: makePost() }))
     const { router } = await renderPostDetailView('1', 7)
     await waitFor(() => screen.getByText('投稿本文'))
 
@@ -175,13 +185,16 @@ describe('PostDetailView', () => {
     // コンポーネントインスタンスを使い回すため、実際の挙動に合わせてidのprops変更を
     // rerenderで再現する（router.pushだけでは、単体テストで直接renderした
     // このコンポーネントのpropsは自動更新されない）
-    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: makePost() })
+    mockGet((url) => {
+      if (url === '/api/posts/1') return Promise.resolve({ data: makePost() })
+      if (url === '/api/posts/2') {
+        return Promise.resolve({ data: makePost({ id: 2, body: '別の投稿本文' }) })
+      }
+      return Promise.reject(new Error(`unexpected url: ${url}`))
+    })
     const { rerender } = await renderPostDetailView()
     await waitFor(() => screen.getByText('投稿本文'))
 
-    vi.mocked(apiClient.get).mockResolvedValueOnce({
-      data: makePost({ id: 2, body: '別の投稿本文' }),
-    })
     await rerender({ id: '2' })
 
     await waitFor(() => {
