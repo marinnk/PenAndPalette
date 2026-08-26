@@ -35,11 +35,17 @@ const basePost = {
 }
 
 // AppHeader（PostDetailViewが子コンポーネントとして描画する）がマウント時にGET
-// /api/requests/receivedを呼ぶため、単純な呼び出し順ベースのmockResolvedValueOnceだと
-// 投稿本体のGET /api/posts/{id}の応答と混線してしまう。URLで振り分けるmockImplementationにする
-function mockGet(handlePostsUrl: (url: string) => Promise<unknown>) {
+// /api/requests/receivedを呼び、PostDetailView自身も投稿取得と並んでGET
+// /api/posts/{id}/commentsを呼ぶため、単純な呼び出し順ベースのmockResolvedValueOnceだと
+// 3つの応答が混線してしまう。URLで振り分けるmockImplementationにする。
+// handleCommentsUrlを省略したテストはコメント0件として扱う
+function mockGet(
+  handlePostsUrl: (url: string) => Promise<unknown>,
+  handleCommentsUrl: (url: string) => Promise<unknown> = () => Promise.resolve({ data: [] }),
+) {
   vi.mocked(apiClient.get).mockImplementation((url: string) => {
     if (url === '/api/requests/received') return Promise.resolve({ data: [] })
+    if (url.endsWith('/comments')) return handleCommentsUrl(url)
     return handlePostsUrl(url)
   })
 }
@@ -200,8 +206,136 @@ describe('PostDetailView', () => {
     await rerender({ id: '2' })
 
     await waitFor(() => {
-      expect(apiClient.get).toHaveBeenLastCalledWith('/api/posts/2')
+      expect(apiClient.get).toHaveBeenCalledWith('/api/posts/2')
       expect(screen.getByText('別の投稿本文')).toBeInTheDocument()
     })
+  })
+
+  it('コメント一覧の取得に失敗した場合はエラーメッセージを表示する', async () => {
+    mockGet(
+      () => Promise.resolve({ data: makePost() }),
+      () => Promise.reject(new Error('network error')),
+    )
+    await renderPostDetailView()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('comments-fetch-error')).toBeInTheDocument()
+    })
+  })
+
+  it('マウント時にコメント一覧を取得して表示する', async () => {
+    const comment = {
+      id: 10,
+      author: { id: 9, username: 'commenter', display_name: 'コメント太郎', avatar_url: null },
+      content: 'いいコメントです',
+      image_url: null,
+      created_at: '2026-08-23T00:00:00Z',
+      updated_at: '2026-08-23T00:00:00Z',
+    }
+    mockGet(
+      () => Promise.resolve({ data: makePost() }),
+      () => Promise.resolve({ data: [comment] }),
+    )
+    await renderPostDetailView()
+
+    await waitFor(() => {
+      expect(apiClient.get).toHaveBeenCalledWith('/api/posts/1/comments')
+      expect(screen.getByText('いいコメントです')).toBeInTheDocument()
+      expect(screen.getByText('コメント（1件）')).toBeInTheDocument()
+    })
+  })
+
+  it('コメントを投稿すると一覧に追加され件数が増える', async () => {
+    mockGet(() => Promise.resolve({ data: makePost({ comment_count: 0 }) }))
+    await renderPostDetailView()
+    await waitFor(() => screen.getByText('コメント（0件）'))
+
+    const newComment = {
+      id: 20,
+      author: { id: 1, username: 'taro', display_name: '太郎', avatar_url: null },
+      content: '新しいコメント',
+      image_url: null,
+      created_at: '2026-08-23T00:00:00Z',
+      updated_at: '2026-08-23T00:00:00Z',
+    }
+    vi.mocked(apiClient.post).mockResolvedValueOnce({ data: newComment })
+    await fireEvent.update(screen.getByTestId('comment-body'), '新しいコメント')
+    await fireEvent.click(screen.getByTestId('comment-compose-submit'))
+
+    await waitFor(() => {
+      expect(screen.getByText('新しいコメント')).toBeInTheDocument()
+      expect(screen.getByText('コメント（1件）')).toBeInTheDocument()
+      expect(screen.getByTestId('like-button-1')).toHaveTextContent('いいね 2') // 他の数値は不変
+    })
+  })
+
+  it('コメント投稿に失敗した場合はコメント投稿フォーム自身の枠内にエラーを表示する', async () => {
+    mockGet(() => Promise.resolve({ data: makePost({ comment_count: 0 }) }))
+    await renderPostDetailView()
+    await waitFor(() => screen.getByText('コメント（0件）'))
+
+    vi.mocked(apiClient.post).mockRejectedValueOnce(new Error('network error'))
+    await fireEvent.update(screen.getByTestId('comment-body'), '失敗するコメント')
+    await fireEvent.click(screen.getByTestId('comment-compose-submit'))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('comment-compose-error')).toBeInTheDocument()
+    })
+  })
+
+  it('自分のコメントの編集に失敗した場合は編集フォームを開いたままにする', async () => {
+    const comment = {
+      id: 30,
+      author: { id: 1, username: 'taro', display_name: '太郎', avatar_url: null },
+      content: '編集前',
+      image_url: null,
+      created_at: '2026-08-23T00:00:00Z',
+      updated_at: '2026-08-23T00:00:00Z',
+    }
+    mockGet(
+      () => Promise.resolve({ data: makePost({ comment_count: 1 }) }),
+      () => Promise.resolve({ data: [comment] }),
+    )
+    await renderPostDetailView()
+    await waitFor(() => screen.getByText('編集前'))
+
+    await fireEvent.click(screen.getByTestId('comment-edit-button-30'))
+    vi.mocked(apiClient.put).mockRejectedValueOnce(new Error('network error'))
+    await fireEvent.update(screen.getByTestId('comment-edit-content-30'), '編集後')
+    await fireEvent.click(screen.getByTestId('comment-edit-save-30'))
+
+    await waitFor(() => {
+      // 編集フォームが開いたままで、入力した内容も残っている
+      expect(screen.getByTestId('comment-edit-content-30')).toHaveValue('編集後')
+      expect(screen.getByTestId('comment-edit-error-30')).toBeInTheDocument()
+    })
+  })
+
+  it('自分のコメントの削除ボタン→確認後に一覧から消え件数が減る', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const comment = {
+      id: 10,
+      author: { id: 1, username: 'taro', display_name: '太郎', avatar_url: null },
+      content: '消されるコメント',
+      image_url: null,
+      created_at: '2026-08-23T00:00:00Z',
+      updated_at: '2026-08-23T00:00:00Z',
+    }
+    mockGet(
+      () => Promise.resolve({ data: makePost({ comment_count: 1 }) }),
+      () => Promise.resolve({ data: [comment] }),
+    )
+    await renderPostDetailView()
+    await waitFor(() => screen.getByText('消されるコメント'))
+
+    vi.mocked(apiClient.delete).mockResolvedValueOnce({})
+    await fireEvent.click(screen.getByTestId('comment-delete-button-10'))
+
+    await waitFor(() => {
+      expect(apiClient.delete).toHaveBeenCalledWith('/api/comments/10')
+      expect(screen.queryByText('消されるコメント')).not.toBeInTheDocument()
+      expect(screen.getByText('コメント（0件）')).toBeInTheDocument()
+    })
+    vi.restoreAllMocks()
   })
 })

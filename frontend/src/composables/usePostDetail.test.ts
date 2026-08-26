@@ -65,6 +65,27 @@ describe('usePostDetail', () => {
     expect(deleteError.value).toBeNull()
   })
 
+  it('load: 前の投稿への応答が新しい投稿への応答より後に届いても上書きしない', async () => {
+    let resolveFirst: (value: unknown) => void = () => {}
+    vi.mocked(apiClient.get).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveFirst = resolve
+        }),
+    )
+    const { post, load } = usePostDetail()
+    const firstLoad = load(1)
+
+    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: { ...samplePost, id: 2 } })
+    await load(2)
+    expect(post.value?.id).toBe(2)
+
+    resolveFirst({ data: samplePost })
+    await firstLoad
+
+    expect(post.value?.id).toBe(2)
+  })
+
   it('toggleLike: 現在のpostにいいねの結果を反映する', async () => {
     vi.mocked(apiClient.get).mockResolvedValueOnce({ data: samplePost })
     const { post, load, toggleLike } = usePostDetail()

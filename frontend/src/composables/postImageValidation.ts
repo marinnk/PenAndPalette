@@ -7,10 +7,10 @@ export const MAX_IMAGES = 4
 export const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024
 export const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png']
 
-/** validateNewImage・validateAvatarFileに共通の、形式（jpg/png）・サイズ（5MB）チェック。
- * バックエンドのvalidate_image_file（common/storage.py）と同じルール
+/** validateNewImage・validateAvatarFile・validateCommentImageに共通の、形式（jpg/png）・
+ * サイズ（5MB）チェック。バックエンドのvalidate_image_file（common/storage.py）と同じルール
  */
-function checkImageFormatAndSize(file: File): string | null {
+export function checkImageFormatAndSize(file: File): string | null {
   if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
     return '画像はjpgまたはpng形式のみ添付できます。'
   }
@@ -31,5 +31,12 @@ export function validateNewImage(file: File, currentCount: number): string | nul
  * validateNewImageと違い選択済み枚数のチェックは不要。useProfileEditで使う
  */
 export function validateAvatarFile(file: File): string | null {
+  return checkImageFormatAndSize(file)
+}
+
+/** コメント画像を検証する。アイコンと同じく常に1枚を選び直すだけなので、
+ * 選択済み枚数のチェックは不要。useCommentsで使う
+ */
+export function validateCommentImage(file: File): string | null {
   return checkImageFormatAndSize(file)
 }

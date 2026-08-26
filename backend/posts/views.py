@@ -6,8 +6,11 @@ from rest_framework.views import APIView
 
 from common.permissions import IsOwner, get_owned_object_or_404
 from common.storage import delete_images_best_effort
-from posts.models import Like, Post, Want
+from posts.models import Comment, Like, Post, Want
 from posts.serializers import (
+    CommentCreateSerializer,
+    CommentSerializer,
+    CommentUpdateSerializer,
     LikeReactionSerializer,
     PostCreateSerializer,
     PostListQuerySerializer,
@@ -36,6 +39,7 @@ class PostListCreateView(APIView):
         # 再取得しなくてもauthorのシリアライズに追加クエリは発生しない
         post.like_count = 0
         post.want_count = 0
+        post.comment_count = 0
         post.liked_by_me = False
         post.wanted_by_me = False
         return Response(PostSerializer(post).data, status=status.HTTP_201_CREATED)
@@ -71,13 +75,17 @@ class PostDetailView(APIView):
 
     def delete(self, request, post_id):
         post = get_owned_object_or_404(self, request, Post, pk=post_id)
-        # post.delete()の前にURLを収集しておく必要がある（削除後はpost.imagesを辿れない）
+        # post.delete()の前にURLを収集しておく必要がある（削除後はpost.images・
+        # post.commentsを辿れない）
+        # delete_images_best_effortはNone/空文字を「削除対象なし」として無視するため、
+        # ここでimage_url__isnull=True等を除外する必要はない
         image_urls = list(post.images.values_list("image_url", flat=True))
+        comment_image_urls = list(post.comments.values_list("image_url", flat=True))
         # comments・likes・wants・post_imagesはON DELETE CASCADEで自動的に削除される。
-        # ただしS3上の実ファイルはCASCADEでは消えないため、
+        # ただしS3上の実ファイル（投稿画像・コメント画像）はCASCADEでは消えないため、
         # 下でアプリケーション側から明示的に削除する
         post.delete()
-        delete_images_best_effort(image_urls)
+        delete_images_best_effort(image_urls + comment_image_urls)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -117,3 +125,50 @@ class PostWantView(APIView):
         post = get_object_or_404(Post, pk=post_id)
         Want.objects.remove(post, request.user)
         return Response(WantReactionSerializer(_reload_with_reactions(post_id, request.user)).data)
+
+
+class PostCommentListCreateView(APIView):
+    """GET /api/posts/{post_id}/comments コメント一覧を取得する。
+    POST /api/posts/{post_id}/comments コメントを投稿する（基本設計書6.4章）。
+
+    投稿者本人以外の利用者もコメントできるため、ログインしていれば誰でも呼べる
+    （IsOwnerによる所有者チェックはここでは行わない。CommentDetailView参照）。
+    """
+
+    def get(self, request, post_id):
+        get_object_or_404(Post, pk=post_id)
+        comments = Comment.objects.list_for_post(post_id)
+        return Response(CommentSerializer(comments, many=True).data)
+
+    def post(self, request, post_id):
+        post = get_object_or_404(Post, pk=post_id)
+        serializer = CommentCreateSerializer(
+            data=request.data, context={"request": request, "post": post}
+        )
+        serializer.is_valid(raise_exception=True)
+        comment = serializer.save()
+        return Response(CommentSerializer(comment).data, status=status.HTTP_201_CREATED)
+
+
+class CommentDetailView(APIView):
+    """PUT /api/comments/{comment_id} 自分のコメントを編集する。
+    DELETE /api/comments/{comment_id} 自分のコメントを削除する（基本設計書6.4章）。
+    """
+
+    permission_classes = [IsAuthenticated, IsOwner]
+
+    def put(self, request, comment_id):
+        comment = get_owned_object_or_404(self, request, Comment, pk=comment_id)
+        serializer = CommentUpdateSerializer(comment, data=request.data)
+        serializer.is_valid(raise_exception=True)
+        comment = serializer.save()
+        # S3の実削除はDBコミット確定後に行う（CommentUpdateSerializer.updateのコメント参照）
+        delete_images_best_effort([comment._removed_image_url])
+        return Response(CommentSerializer(comment).data)
+
+    def delete(self, request, comment_id):
+        comment = get_owned_object_or_404(self, request, Comment, pk=comment_id)
+        image_url = comment.image_url
+        comment.delete()
+        delete_images_best_effort([image_url])
+        return Response(status=status.HTTP_204_NO_CONTENT)

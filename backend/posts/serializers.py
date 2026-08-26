@@ -2,7 +2,7 @@ from django.db import models, transaction
 from rest_framework import serializers
 
 from common.storage import delete_image, upload_image, validate_image_file
-from posts.models import Post, PostImage
+from posts.models import Comment, Post, PostImage
 from users.serializers import UserSerializer
 
 # 投稿に添付できる画像の上限枚数（基本設計書6.3章）。PostCreateSerializer・
@@ -12,21 +12,21 @@ from users.serializers import UserSerializer
 MAX_POST_IMAGES = 4
 
 
-def _post_body_or_empty(post) -> str:
-    """画像のみの投稿はDB上body=NULLになりうるが、フロントエンドのPost.body型（string）を
-    変えずに済ませるため、レスポンスでは空文字に統一する（PostSerializer・
-    PostSummarySerializerのbodyフィールドで共通）。
+def _or_empty(value: str | None) -> str:
+    """画像のみの投稿・コメントはDB上body/content=NULLになりうるが、フロントエンドの
+    string型を変えずに済ませるため、レスポンスでは空文字に統一する（PostSerializer・
+    PostSummarySerializer・CommentSerializerで共通）。
     """
-    return post.body or ""
+    return value or ""
 
 
 class PostSerializer(serializers.Serializer):
     """投稿一覧・詳細・作成直後のレスポンス共通のシリアライザ（基本設計書6.3章）。
 
-    like_count・want_count・liked_by_me・wanted_by_meはPost.objects.with_reactions()の
-    annotate()で付与された属性をそのまま読み出す。id等のフィールドと違い、この投稿が
-    ModelSerializerではなくSerializerな理由は、annotateされた属性・SerializerMethodField
-    （body・images・comment_count）が混在しモデルのフィールドだけでは完結しないため。
+    like_count・want_count・comment_count・liked_by_me・wanted_by_meはPost.objects.
+    with_reactions()のannotate()で付与された属性をそのまま読み出す。id等のフィールドと違い、
+    この投稿がModelSerializerではなくSerializerな理由は、annotateされた属性・
+    SerializerMethodField（body・images）が混在しモデルのフィールドだけでは完結しないため。
     """
 
     id = serializers.IntegerField(read_only=True)
@@ -36,14 +36,14 @@ class PostSerializer(serializers.Serializer):
     image_ids = serializers.SerializerMethodField()
     like_count = serializers.IntegerField(read_only=True)
     want_count = serializers.IntegerField(read_only=True)
-    comment_count = serializers.SerializerMethodField()
+    comment_count = serializers.IntegerField(read_only=True)
     liked_by_me = serializers.BooleanField(read_only=True)
     wanted_by_me = serializers.BooleanField(read_only=True)
     created_at = serializers.DateTimeField(read_only=True)
     updated_at = serializers.DateTimeField(read_only=True)
 
     def get_body(self, obj):
-        return _post_body_or_empty(obj)
+        return _or_empty(obj.body)
 
     def _resolve_images(self, obj):
         # 作成直後はPostCreateSerializer.create()で構築済みのリストを使い、DBへの再クエリを
@@ -63,10 +63,6 @@ class PostSerializer(serializers.Serializer):
         # 「残す既存画像」を指定するkeep_image_idsに使う（基本設計書6.3章）
         return [image.id for image in self._resolve_images(obj)]
 
-    def get_comment_count(self, obj):
-        # TODO(F-4 コメント機能): Commentモデル実装後、annotate()によるCount集計に置き換える
-        return 0
-
 
 class PostSummarySerializer(serializers.Serializer):
     """投稿の軽量な要約表示（基本設計書6.7章 F-6 リクエストのrelated_post埋め込み等で使う）。
@@ -83,7 +79,7 @@ class PostSummarySerializer(serializers.Serializer):
     created_at = serializers.DateTimeField(read_only=True)
 
     def get_body(self, obj):
-        return _post_body_or_empty(obj)
+        return _or_empty(obj.body)
 
     def get_image(self, obj):
         # 先頭1枚のURLのみ返す（一覧のサムネイル用途）。呼び出し側でprefetch_related("images")
@@ -259,3 +255,106 @@ class PostListQuerySerializer(serializers.Serializer):
         if attrs.get("user_id") is not None and attrs.get("scope") == "following":
             raise serializers.ValidationError("user_idとscope=followingは同時に指定できません。")
         return attrs
+
+
+class CommentSerializer(serializers.Serializer):
+    """コメント一覧・作成・編集直後のレスポンス共通のシリアライザ（基本設計書6.4章）。"""
+
+    id = serializers.IntegerField(read_only=True)
+    author = UserSerializer(source="user", read_only=True)
+    content = serializers.SerializerMethodField()
+    image_url = serializers.CharField(read_only=True)
+    created_at = serializers.DateTimeField(read_only=True)
+    updated_at = serializers.DateTimeField(read_only=True)
+
+    def get_content(self, obj):
+        return _or_empty(obj.content)
+
+
+class CommentWriteSerializer(serializers.Serializer):
+    """CommentCreateSerializer・CommentUpdateSerializerに共通の入力フィールド・検証
+    （基本設計書6.4章）。content（0〜280文字）・image（0〜1枚）の少なくとも一方が必須という
+    ルールは両者で同じだが、「保存後に画像が残るか」の判定（既存画像の有無を考慮するか）だけが
+    異なるため、それをresulting_has_imageとしてサブクラスに委ねる。
+
+    contentはdefault=""を持たせない：省略された場合はvalidated_dataに"content"キー自体が
+    現れないというDRFの挙動を利用し、「本文を省略＝変更しない」（Update時）と
+    「本文を明示的に空文字で送る＝本文を消す」を区別できるようにする（PostUpdateSerializerの
+    keep_image_idsと同じ理由。ただしそちらはrequired=Trueで明示を強制する方式、こちらは
+    「省略時は既存を維持」という逆方向のデフォルト動作にしたいためrequired=Falseのまま）。
+    Create時はそもそも既存値が無いため、「省略」も「空文字」も同じ「本文なし」として扱う
+    （validated_data.get("content")で読む）。
+    """
+
+    content = serializers.CharField(
+        max_length=280, trim_whitespace=True, required=False, allow_blank=True
+    )
+    image = serializers.FileField(required=False)
+
+    def validate_image(self, value):
+        validate_image_file(value)
+        return value
+
+    def resulting_has_image(self, attrs) -> bool:
+        return bool(attrs.get("image"))
+
+    def validate(self, attrs):
+        if not attrs.get("content") and not self.resulting_has_image(attrs):
+            raise serializers.ValidationError("本文または画像のいずれかを入力してください。")
+        return attrs
+
+
+class CommentCreateSerializer(CommentWriteSerializer):
+    """POST /api/posts/{post_id}/comments のリクエストボディ検証・コメント作成を担う
+    （基本設計書6.4章）。multipart/form-data。
+    """
+
+    def create(self, validated_data):
+        image = validated_data.get("image")
+        image_url = upload_image(image, folder="comments") if image else None
+        return Comment.objects.create(
+            post=self.context["post"],
+            user=self.context["request"].user,
+            content=validated_data.get("content") or None,
+            image_url=image_url,
+        )
+
+
+class CommentUpdateSerializer(CommentWriteSerializer):
+    """PUT /api/comments/{comment_id} のリクエストボディ検証・コメント編集を担う
+    （基本設計書6.4章）。multipart/form-data。content・image・remove_imageのいずれも
+    省略した項目は既存の値をそのまま維持する（imageとremove_imageのどちらも送らない場合は
+    既存画像を維持、というAPI設計は元々この方針。contentも同じ扱いに揃える）。
+    """
+
+    remove_image = serializers.BooleanField(required=False, default=False)
+
+    def resulting_has_image(self, attrs) -> bool:
+        # 新しい画像が送られていれば残る。remove_image=trueなら常に残らない。
+        # どちらでもなければ既存画像の有無をそのまま引き継ぐ
+        if attrs.get("image"):
+            return True
+        if attrs.get("remove_image"):
+            return False
+        return bool(self.instance.image_url)
+
+    def update(self, instance, validated_data):
+        # S3上の実ファイル削除はここでは行わず、削除対象のURLをinstance._removed_image_urlに
+        # 記録するだけにとどめる。実削除はビュー側でこのメソッドの成功（＝DBコミット確定）後に
+        # 行う（PostUpdateSerializer.updateと同じ理由）
+        removed_url = None
+        new_image = validated_data.get("image")
+        if new_image:
+            removed_url = instance.image_url
+            instance.image_url = upload_image(new_image, folder="comments")
+        elif validated_data.get("remove_image"):
+            removed_url = instance.image_url
+            instance.image_url = None
+
+        # "content"キーが無い＝省略（本文は変更しない）。空文字を含め明示的に送られていれば
+        # そちらを反映する（contentクラスのdocstring参照）
+        if "content" in validated_data:
+            instance.content = validated_data["content"] or None
+        instance.save(update_fields=["content", "image_url", "updated_at"])
+        instance._removed_image_url = removed_url
+        return instance

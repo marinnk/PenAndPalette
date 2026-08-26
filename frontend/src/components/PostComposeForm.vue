@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { pickFileFromInput } from '@/lib/fileInput'
+
 // S04 投稿作成画面。自分の投稿の[編集]から開いた場合はmode="edit"で同じ画面を再利用する
 // （画面設計書169行目）。純表示コンポーネントとして、状態・API呼び出しは持たず
 // PostCreateView/PostEditViewからpropsで受け取った値を描画し、操作をemitで返すだけに徹する
@@ -28,11 +30,8 @@ const heading = props.mode === 'edit' ? '投稿を編集' : '投稿する'
 const submitLabel = props.mode === 'edit' ? '保存する' : '投稿する'
 
 function onFileSelected(event: Event) {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
+  const file = pickFileFromInput(event)
   if (file) emit('add-image', file)
-  // 同じファイルを削除後に再度選び直せるよう、inputの値をクリアしておく
-  input.value = ''
 }
 </script>
 

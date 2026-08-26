@@ -38,6 +38,9 @@ class PostUpdateTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         self.post.refresh_from_db()
         self.assertEqual(self.post.body, "編集前の本文")
+        # IsOwnerはPost・Commentで共用するため、文言から「投稿」が抜け落ちていないことを
+        # 確認する（common/permissions.py参照）
+        self.assertIn("投稿", response.json()["detail"])
 
     def test_update_with_nonexistent_id_returns_404(self):
         self._login()
