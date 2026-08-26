@@ -56,8 +56,10 @@
 | エンティティ | 概要 |
 |---|---|
 | 利用者（users） | 会員登録した利用者。ユーザー名・メールアドレス・パスワードハッシュ・表示名・自己紹介・アイコン画像URLを持つ |
-| 投稿（posts） | 本文（280文字まで）と、任意で画像からなる投稿 |
+| 投稿（posts） | イラスト投稿（画像必須、本文任意280文字まで）または小説投稿（タイトル・本文必須、本文4000文字まで、画像任意）のいずれか。分類タグを最大5個まで付けられる |
 | 投稿画像（post_images） | 投稿に添付された画像（1投稿につき最大4件、任意） |
+| 分類タグ（tags） | 投稿に付ける分類の候補。アプリがあらかじめ用意した固定の一覧（利用者は追加できない） |
+| 投稿分類タグ（post_tags） | 投稿と分類タグの中間テーブル（多対多）。1投稿につき0〜5個まで |
 | コメント（comments） | 投稿へのコメント。画像を1枚まで添付できる |
 | いいね（likes） | 投稿へのいいね |
 | かきたい（wants） | 投稿への「かきたい」（創作意欲の表明） |
@@ -89,11 +91,39 @@
 |---|---|---|---|
 | id | BIGINT | PK, AUTO_INCREMENT | |
 | user_id | BIGINT | FK→users.id, NOT NULL | 投稿者 |
-| body | VARCHAR(280) | NULL可 | 本文。画像のみの投稿の場合はNULL |
+| post_type | VARCHAR(20) | NOT NULL, CHECK制約：'illustration'または'novel' | 投稿種別。投稿作成画面（S04）でどちらの形式を使ったかで自動的に決まる（利用者が別途選ぶ項目ではない） |
+| title | VARCHAR(100) | NULL可 | タイトル。小説投稿では必須、イラスト投稿では常にNULL |
+| body | VARCHAR(4000) | NULL可 | 本文。イラスト投稿では任意（0〜280文字、NULLもありうる）、小説投稿では必須（1〜4000文字） |
 | created_at | DATETIME | NOT NULL | |
 | updated_at | DATETIME | NOT NULL | |
 
-「本文・画像の少なくとも一方が必要」というルールはDB制約ではなくアプリケーション側のバリデーションで実現する（`body`がNULLかつ紐づく`post_images`が0件の投稿を作成させない）。種別（小説／イラスト）やタイトルのカラムは持たない。
+投稿の入力ルールは`post_type`により異なる。DB制約ではなくアプリケーション側のバリデーションで実現する：
+- イラスト投稿（`post_type='illustration'`）：画像が1〜4枚必須。本文は任意（0〜280文字）
+- 小説投稿（`post_type='novel'`）：タイトル（1〜100文字）・本文（1〜4000文字）が必須。画像は任意で最大1枚（カバー画像）
+
+`body`カラムの型がVARCHAR(4000)なのは小説投稿の上限に合わせたためで、イラスト投稿では引き続きアプリケーション側で0〜280文字に制限する（DBカラムの上限＝その種別で許される上限、ではない点に注意）。
+
+`MAX_POST_IMAGES`（投稿画像の上限4枚。`backend/posts/serializers.py`と`frontend/src/composables/postImageValidation.ts`の2箇所に同じ値を複製する実装上の慣習）と同様に、本文文字数の上限（イラスト280／小説4000）・タイトル文字数の上限（100）・画像枚数の上限（イラスト最大4／小説カバー最大1）も、バックエンド・フロントエンドそれぞれに定数として複製する実装になる見込み。実装時（Issue 2・3）はこれらを必ず揃えて変更すること。
+
+#### tags
+
+| カラム | 型 | 制約 | 説明 |
+|---|---|---|---|
+| id | BIGINT | PK, AUTO_INCREMENT | |
+| name | VARCHAR(50) | NOT NULL, UNIQUE | タグ名（例：オリジナル、ファンタジー） |
+| display_order | INT | NOT NULL | 一覧・選択肢での表示順（0始まり） |
+| created_at | DATETIME | NOT NULL | |
+
+利用者がタグを追加・編集・削除することはできない固定の一覧で、初期データ（マイグレーションのシードデータ）として12件を投入する（一覧は6.11節参照）。
+
+#### post_tags
+
+| カラム | 型 | 制約 | 説明 |
+|---|---|---|---|
+| post_id | BIGINT | FK→posts.id, NOT NULL, ON DELETE CASCADE | 投稿削除時にタグの付与情報も削除 |
+| tag_id | BIGINT | FK→tags.id, NOT NULL, ON DELETE RESTRICT | 参照されているタグは削除できないようにする |
+
+複合主キー：(post_id, tag_id)。1つのpostにつき最大5件までに、アプリケーション側のバリデーションで制限する。tag_idを`ON DELETE RESTRICT`とするのは、tagsが利用者操作では変化しないアプリ管理の固定データであり、誤って行を削除した場合に投稿側のタグ付けが黙って失われるより、削除自体をエラーにして気づけるほうが安全なため（post_idは他のテーブルと同様、投稿削除時にCASCADEで自動整理する）。
 
 #### post_images
 
@@ -198,6 +228,8 @@ erDiagram
     POSTS ||--o{ LIKES : "いいねされる"
     POSTS ||--o{ WANTS : "かきたいされる"
     POSTS ||--o{ REQUESTS : "参考にされる（related_post_id, 任意）"
+    POSTS ||--o{ POST_TAGS : "タグが付く"
+    TAGS ||--o{ POST_TAGS : "投稿に使われる"
 
     USERS {
         bigint id PK
@@ -213,6 +245,8 @@ erDiagram
     POSTS {
         bigint id PK
         bigint user_id FK
+        varchar post_type
+        varchar title
         varchar body
         datetime created_at
         datetime updated_at
@@ -223,6 +257,16 @@ erDiagram
         varchar image_url
         int display_order
         datetime created_at
+    }
+    TAGS {
+        bigint id PK
+        varchar name UK
+        int display_order
+        datetime created_at
+    }
+    POST_TAGS {
+        bigint post_id PK, FK
+        bigint tag_id PK, FK
     }
     COMMENTS {
         bigint id PK
@@ -271,7 +315,7 @@ erDiagram
 
 補足：いいね数・かきたい数・コメント数は、likes・wants・commentsテーブルの件数を集計（COUNT）して算出する方針とし、posts側に件数を保持するカラムは設けない。データ量が増えて集計コストが問題になった場合は、集計値をキャッシュするカラムの追加を検討する。
 
-文字数上限は本節の値で確定とする：username・display_nameは50文字、bioは160文字、posts.body・comments.content・requests.messageは280文字。いずれも姉妹プロジェクトRaiseTechSNSの確定値と同一（requests.messageのみPenAndPalette固有の項目だが、投稿・コメントと同じ280文字に揃えた）。
+文字数上限は本節の値で確定とする：username・display_nameは50文字、bioは160文字、comments.content・requests.messageは280文字。posts.bodyのみ投稿種別により異なり、イラスト投稿は280文字（他の280文字項目と同じ）、小説投稿は4000文字とする。小説投稿だけ大きく緩和するのは、小説投稿がその名のとおり作品の本文そのもの（一場面の断片ではなく、ある程度まとまった読み物）を想定しているためで、他の項目（自己紹介・コメント・リクエストメッセージ・イラスト投稿の本文）はいずれも「短い一言・一場面」を想定した項目のままである。posts.title（小説投稿のみ必須）は100文字までとする。いずれも姉妹プロジェクトRaiseTechSNSの確定値と同一（requests.messageのみPenAndPalette固有の項目だが、投稿・コメントと同じ280文字に揃えた。小説投稿の4000文字・タイトルの100文字はRaiseTechSNSに対応する項目がなくPenAndPalette独自の判断）。
 
 ## 5. 非機能要件
 
@@ -318,17 +362,19 @@ erDiagram
 
 | メソッド | パス | 説明 |
 |---|---|---|
-| GET | /api/posts?limit=\&before_id=\&after_id=\&user_id=\&scope= | 投稿一覧を新しい順（`id`降順）に取得する |
-| POST | /api/posts | 投稿を作成する（multipart/form-data。`body`：本文0〜280文字、`images`：画像0〜4枚）。`body`・`images`の少なくとも一方が必須 |
+| GET | /api/posts?limit=\&before_id=\&after_id=\&user_id=\&scope=\&post_type= | 投稿一覧を新しい順（`id`降順）に取得する |
+| POST | /api/posts | 投稿を作成する（multipart/form-data）。`post_type`：'illustration'または'novel'必須。`title`：小説投稿のみ必須（1〜100文字）、イラスト投稿では送らない。`body`：イラスト投稿は任意（0〜280文字）、小説投稿は必須（1〜4000文字）。`images`：イラスト投稿は1〜4枚必須、小説投稿は0〜1枚（カバー画像）。`tag_ids`：分類タグのidを0〜5個 |
 | GET | /api/posts/{post_id} | 投稿の詳細を取得する |
-| PUT | /api/posts/{post_id} | 自分の投稿を編集する（multipart/form-data。`body`：本文、`keep_image_ids`：残す既存画像のidをカンマ区切りで指定、`images`：新規追加する画像ファイル）。他人の投稿を指定した場合は403 |
+| PUT | /api/posts/{post_id} | 自分の投稿を編集する（multipart/form-data。`title`・`body`：種別ごとの入力ルールに従う、`keep_image_ids`：残す既存画像のidをカンマ区切りで指定、`images`：新規追加する画像ファイル、`tag_ids`：分類タグのidを0〜5個）。他人の投稿を指定した場合は403 |
 | DELETE | /api/posts/{post_id} | 自分の投稿を削除する。付随するコメント・いいね・かきたいはDBの外部キー制約（ON DELETE CASCADE）により自動的に削除される。他人の投稿を指定した場合は403 |
 
 - `user_id`を指定すると、その利用者の投稿のみに絞り込む（プロフィール画面の投稿一覧に使用）
 - `scope=following`を指定すると、フォロー中の利用者（および自分自身）の投稿のみに絞り込む（タイムラインの「フォロー中」タブに使用）。省略時・`scope=all`は絞り込みなし（「全体」タブ）
+- `post_type=illustration`または`post_type=novel`を指定すると、その種別の投稿のみに絞り込む（タイムラインのイラスト／小説タブに使用）。省略時は両方の種別を含める。`scope`（全体／フォロー中）とは独立した軸のため、`user_id`と`scope`の同時指定制限とは異なり`post_type`はこれらと自由に組み合わせられる（例：`scope=following&post_type=novel`で「フォロー中の小説投稿のみ」）
 - `user_id`と`scope=following`は同時指定不可（400）。`before_id`と`after_id`も同時指定不可（400）
-- レスポンスには本文・画像URLに加え、`like_count`・`want_count`・`comment_count`・`liked_by_me`・`wanted_by_me`を含める。投稿ごとに個別クエリで集計するとN+1問題が起きるため、Django ORMの`annotate()`（`Count`・`Exists`のサブクエリ）で1回のSELECTにまとめて取得する
-- 投稿編集時、既存の画像をファイルとして再送信させることはしない（既にS3上にあるファイルをダウンロードして再アップロードする無駄な往復になるため）。残したい画像は`keep_image_ids`でidを指定し、新規追加分のみ`images`でファイルを送る。`keep_image_ids`に含まれない既存の投稿画像はDB行を削除し、対応するS3オブジェクトも削除する。`keep_image_ids`の件数＋`images`の件数の合計が4件を超える場合は400
+- レスポンスには本文・画像URLに加え、`like_count`・`want_count`・`comment_count`・`liked_by_me`・`wanted_by_me`・`post_type`・`title`（小説投稿のみ値が入る）・`tags`（付与された分類タグの`{id, name}`一覧）を含める。投稿ごとに個別クエリで集計するとN+1問題が起きるため、Django ORMの`annotate()`（`Count`・`Exists`のサブクエリ）で1回のSELECTにまとめて取得する
+- 投稿編集時、既存の画像をファイルとして再送信させることはしない（既にS3上にあるファイルをダウンロードして再アップロードする無駄な往復になるため）。残したい画像は`keep_image_ids`でidを指定し、新規追加分のみ`images`でファイルを送る。`keep_image_ids`に含まれない既存の投稿画像はDB行を削除し、対応するS3オブジェクトも削除する。`keep_image_ids`の件数＋`images`の件数の合計が種別ごとの上限（イラスト4件・小説1件）を超える場合は400
+- 投稿編集（PUT）では`post_type`は変更できない（作成時に固定）。`title`・`body`・画像・`tag_ids`は種別ごとの入力ルールに従って更新できる
 - 投稿削除時、post_imagesの行はDBの外部キー制約（ON DELETE CASCADE）で自動的に削除されるが、S3上の実ファイルはCASCADEでは消えないため、アプリケーション側で削除対象の画像URLを収集しS3からも削除する
 
 ### 6.4 コメントAPI（F-4 コメント機能）
@@ -403,10 +449,21 @@ erDiagram
 - `before_id`と`after_id`は同時に指定できない（同時指定時は400エラー）
 - `limit`件を超えて（`limit+1`件）取得できた場合に`has_more: true`を返す方式とし、追加のCOUNTクエリは行わない
 - `posts.id`はAUTO_INCREMENTかつ挿入順（＝`created_at`順）と一致するため、カーソルに`created_at`ではなく`id`を使う。offset方式だと無限スクロール中に他利用者の新規投稿がタイムライン先頭に増えるたびに「次のページ」のoffsetがずれて重複・欠落が起きるが、`id`を基準にしたカーソル方式ではその問題が起きない
+- グリッド表示（イラストタブ）でも`limit`の既定値・扱いはリスト表示と変える必要はないと判断し、既定20件のまま据え置く（4列×5行などのグリッドと相性がよく、種別ごとに変える強い理由がないため）
 
 ### 6.10 リアルタイム反映（ポーリング＋新着通知バナー）
 
 姉妹プロジェクト[RaiseTechSNS](../../RaiseTechSNS/docs/basic-design.md)と同じ方式を採用する。他利用者の新規投稿を検知するため、フロントエンドは30秒間隔で`GET /api/posts?after_id=<既知の最新投稿のid>`をポーリングする。ただし検知した投稿は一覧（タイムライン）へ即座には反映しない。投稿中の作業や読んでいる位置をポーリングのたびに動かしてしまわないよう、画面上部に固定表示される新着通知バナー（例：「↑ 3件の新しい投稿があります」、ブラウザ標準のalert等は使わない独自UI）に件数だけを表示し、利用者がバナーをクリックしたタイミングで初めて新着投稿を一覧の先頭に反映し、画面を最上部までスクロールする。バナーは画面のスクロール位置によらず常に表示される。複数回のポーリングで新着投稿が見つかった場合は、バナーをクリックするまで件数が積み上がる。WebSocket等のプッシュ型の仕組みは導入せず、シンプルなポーリング方式とする。他利用者による投稿の編集・削除は、この差分取得の対象外のため自動反映されない（画面を再読み込みするまで反映されない）。
+
+### 6.11 分類タグAPI（F-11 分類タグ機能）
+
+| メソッド | パス | 説明 |
+|---|---|---|
+| GET | /api/tags | 分類タグの一覧を`display_order`昇順で取得する。投稿作成画面（S04）のタグ選択欄で使用する |
+
+- タグはアプリがあらかじめ用意した固定の一覧で、利用者による追加・編集・削除はできない（管理画面や専用の作成APIも設けない）。一覧はマイグレーションのシードデータとして投入する
+- レスポンスは`{id, name}`の配列
+- 固定の分類タグ一覧（12件、`display_order`順）：オリジナル／二次創作／ファンタジー／SF／ホラー・ミステリー／恋愛／日常／コメディ／アクション／ドラマ／キャラクターデザイン／風景・背景
 
 ## 7. 今後の検討事項
 
@@ -428,3 +485,4 @@ erDiagram
 | 1.6 | 2026-08-22 | レビューで見つかった設計上の不足点を修正。(1) 3.1節「CORS・Cookie送信」を新設し、フロント/バックエンドが別オリジンになる場合のCORS設定・SameSite制約と、開発環境・本番環境それぞれの対応方針を明記（本番はRaiseTechSNSと同様のCloudFrontパスベースルーティングが必要になる見込み）。(2) 投稿・コメントの画像編集APIを修正。既存画像をファイルとして再送信させる方式（実現不可能だった）から、`keep_image_ids`（投稿）・`image`/`remove_image`（コメント）で差分を指定する方式に変更。(3) 画像アップロードの許容形式・サイズ上限を「jpg/png、5MB以下」に確定（RaiseTechSNSのアバター制限と同一、投稿・コメント・アバターすべてに適用）。(4) 投稿削除・アバター置き換え/削除・投稿画像入れ替え・コメント画像置き換え/削除の際、S3上の実ファイルも削除する方針を明記 |
 | 1.7 | 2026-08-22 | インフラ構成の方針を1点決定し、7章に追記。RaiseTechSNSはアバター用S3バケットのみ公開設定（直リンクURL方式）だったが、PenAndPaletteでは画像用S3バケットもフロントエンドと同様に非公開とし、CloudFrontのパスベースビヘイビア（`/media/*`等）＋OAC経由でのみ配信する方針に変更 |
 | 1.8 | 2026-08-22 | インフラ構成のうち未決定の項目を7章に記録（決定はせず先送り）。RaiseTechSNS側の既知の妥協点（S3認証情報の方式、ALB〜CloudFront間のHTTP、ALB保護がCloudFrontの送信元IPレンジのみ、Terraform stateのローカル保存）と、CI/CD方式（RaiseTechSNS自身も未確定） |
+| 1.9 | 2026-08-26 | 投稿を「イラスト投稿」「小説投稿」の2種別に再び分割する設計に変更（種別は投稿作成フォームでどちらを使ったかで決まる）。イラスト投稿は画像1〜4枚必須・本文任意280文字までで変更なし、小説投稿はタイトル必須（100文字まで）・本文必須（4000文字まで）・画像任意（最大1枚のカバー画像）を新設。両種別にアプリが定める固定の分類タグ（最大5個）を追加。データベース設計にpostsテーブルの`post_type`・`title`カラム、`tags`・`post_tags`テーブルを追加し、6.11節「分類タグAPI」を新設。`GET /api/posts`に`post_type`パラメータを追加。requirements.md改訂履歴1.1（2026-08-22、小説投稿／イラスト投稿の2種別を単一形式に統合した回）を反転させる変更である点に留意（今回は分類タグを伴う点が以前のモデルとの違い） |
