@@ -187,14 +187,19 @@ class PostTypeValidationMixin:
         """tag_idsの共通チェック（件数・重複・実在）。PostCreateSerializer.validate_tag_ids
         （ListField）・PostUpdateSerializer.validate_tag_ids（CSV文字列をパース後）の
         どちらからも呼ばれる。
+
+        ここで実在確認のために取得したTagの実体（Tag.Meta.ordering=display_order順）を
+        self._validated_tagsに保持しておき、create()・PostSerializer.get_tags向けの
+        _created_tagsスタンプで再クエリしなくて済むようにする。
         """
         if len(ids) > MAX_POST_TAGS:
             raise serializers.ValidationError(f"タグは{MAX_POST_TAGS}個まで選択できます。")
         if len(set(ids)) != len(ids):
             raise serializers.ValidationError("同じタグを複数指定することはできません。")
-        valid_ids = set(Tag.objects.filter(id__in=ids).values_list("id", flat=True))
-        if set(ids) - valid_ids:
+        tags = list(Tag.objects.filter(id__in=ids))
+        if len(tags) != len(ids):
             raise serializers.ValidationError("指定されたタグが見つかりません。")
+        self._validated_tags = tags
         return ids
 
 
@@ -264,12 +269,12 @@ class PostCreateSerializer(PostTypeValidationMixin, serializers.Serializer):
         ]
         # 画像1枚ごとにINSERTするのではなく、まとめて1回のクエリで保存する
         PostImage.objects.bulk_create(images)
-        tag_ids = validated_data["tag_ids"]
-        post.tags.set(tag_ids)
+        post.tags.set(validated_data["tag_ids"])
         # 作成直後のシリアライズ（PostSerializer.get_images・get_tags）で再クエリしなくて
-        # 済むよう、作成したPostImage・タグのリストをその場でPostインスタンスに持たせておく
+        # 済むよう、作成したPostImage・タグのリストをその場でPostインスタンスに持たせておく。
+        # _validated_tagsはcheck_tag_ids()で実在確認のために取得済みのTag実体の使い回し
         post._created_images = images
-        post._created_tags = Tag.objects.filter(id__in=tag_ids).order_by("display_order")
+        post._created_tags = self._validated_tags
         return post
 
 
