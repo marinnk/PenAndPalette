@@ -90,6 +90,29 @@ describe('useComments', () => {
 
       expect(comments.value).toEqual([])
     })
+
+    it('古い投稿への応答が新しい投稿への応答より後に届いても上書きしない', async () => {
+      // ネットワークの遅延・順序入れ替わりにより、投稿1への応答が投稿2への応答より
+      // 後に届いた場合でも、画面には常に最後に要求した投稿2のコメントが残ること
+      let resolveFirst: (value: unknown) => void = () => {}
+      vi.mocked(apiClient.get).mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveFirst = resolve
+          }),
+      )
+      const { comments, fetchComments } = useComments()
+      const firstRequest = fetchComments(1)
+
+      vi.mocked(apiClient.get).mockResolvedValueOnce({ data: [makeComment({ id: 2 })] })
+      await fetchComments(2)
+      expect(comments.value).toEqual([makeComment({ id: 2 })])
+
+      resolveFirst({ data: [makeComment({ id: 1 })] })
+      await firstRequest
+
+      expect(comments.value).toEqual([makeComment({ id: 2 })])
+    })
   })
 
   describe('submitComment', () => {
@@ -135,15 +158,15 @@ describe('useComments', () => {
         response: { status: 400, data: { content: ['この項目は280文字以内で入力してください。'] } },
       })
 
-      const { submitComment, fieldErrors, errorMessage } = useComments()
+      const { submitComment, fieldErrors, composeError } = useComments()
       const result = await submitComment(42)
 
       expect(result).toBeNull()
       expect(fieldErrors.value.content).toEqual(['この項目は280文字以内で入力してください。'])
-      expect(errorMessage.value).toBeNull()
+      expect(composeError.value).toBeNull()
     })
 
-    it('non_field_errorsはerrorMessageに表示される', async () => {
+    it('non_field_errorsはcomposeErrorに表示される', async () => {
       vi.mocked(apiClient.post).mockRejectedValueOnce({
         isAxiosError: true,
         response: {
@@ -152,11 +175,11 @@ describe('useComments', () => {
         },
       })
 
-      const { submitComment, errorMessage } = useComments()
+      const { submitComment, composeError } = useComments()
       const result = await submitComment(42)
 
       expect(result).toBeNull()
-      expect(errorMessage.value).toBe('本文または画像のいずれかを入力してください。')
+      expect(composeError.value).toBe('本文または画像のいずれかを入力してください。')
     })
   })
 
@@ -186,27 +209,27 @@ describe('useComments', () => {
       expect(formData.get('remove_image')).toBe('true')
     })
 
-    it('失敗した場合はerrorMessageを設定しnullを返す', async () => {
+    it('失敗した場合はactionErrorを設定しnullを返す', async () => {
       vi.mocked(apiClient.put).mockRejectedValueOnce(new Error('network error'))
 
-      const { updateComment, errorMessage } = useComments()
+      const { updateComment, actionError } = useComments()
       const result = await updateComment(1, { content: '本文' })
 
       expect(result).toBeNull()
-      expect(errorMessage.value).toBe('コメントの更新に失敗しました。')
+      expect(actionError.value).toBe('コメントの更新に失敗しました。')
     })
 
-    it('400バリデーションエラーは具体的なメッセージをerrorMessageに表示する', async () => {
+    it('400バリデーションエラーは具体的なメッセージをactionErrorに表示する', async () => {
       vi.mocked(apiClient.put).mockRejectedValueOnce({
         isAxiosError: true,
         response: { status: 400, data: { content: ['この項目は280文字以内で入力してください。'] } },
       })
 
-      const { updateComment, errorMessage, fieldErrors } = useComments()
+      const { updateComment, actionError, fieldErrors } = useComments()
       const result = await updateComment(1, { content: '本文' })
 
       expect(result).toBeNull()
-      expect(errorMessage.value).toBe('この項目は280文字以内で入力してください。')
+      expect(actionError.value).toBe('この項目は280文字以内で入力してください。')
       // 更新対象は一覧中の1件だけなので、投稿フォームと共有するfieldErrorsは汚染しない
       expect(fieldErrors.value).toEqual({})
     })
@@ -226,14 +249,14 @@ describe('useComments', () => {
       expect(comments.value).toEqual([])
     })
 
-    it('失敗した場合はerrorMessageを設定しfalseを返す', async () => {
+    it('失敗した場合はactionErrorを設定しfalseを返す', async () => {
       vi.mocked(apiClient.delete).mockRejectedValueOnce(new Error('network error'))
 
-      const { removeComment, errorMessage } = useComments()
+      const { removeComment, actionError } = useComments()
       const result = await removeComment(1)
 
       expect(result).toBe(false)
-      expect(errorMessage.value).toBe('削除に失敗しました。もう一度お試しください。')
+      expect(actionError.value).toBe('削除に失敗しました。もう一度お試しください。')
     })
   })
 })

@@ -8,6 +8,11 @@ import type { Comment } from '@/types/comment'
 
 const ProfileStub = { template: '<div>profile</div>' }
 
+// jsdomはURL.createObjectURL/revokeObjectURLを実装していないため、画像プレビューの
+// テストが動くように最小限のスタブを用意する
+URL.createObjectURL = vi.fn(() => 'blob:mock-url')
+URL.revokeObjectURL = vi.fn()
+
 const comment: Comment = {
   id: 1,
   author: { id: 7, username: 'author', display_name: 'コメント太郎', avatar_url: null },
@@ -30,7 +35,7 @@ function renderItem(props: Record<string, unknown> = {}, currentUserId = 999) {
     routes: [{ path: '/profile/:id', name: 'profile', component: ProfileStub }],
   })
   return render(CommentListItem, {
-    props: { comment, ...props },
+    props: { comment, updateComment: vi.fn().mockResolvedValue(comment), ...props },
     global: { plugins: [pinia, router] },
   })
 }
@@ -72,15 +77,37 @@ describe('CommentListItem', () => {
     expect(screen.getByTestId('comment-edit-save-1')).toBeInTheDocument()
   })
 
-  it('編集して保存すると更新内容でupdateをemitし表示モードに戻る', async () => {
-    const { emitted } = renderItem({}, 7)
+  it('編集して保存に成功すると更新内容でupdateCommentを呼び表示モードに戻る', async () => {
+    const updateComment = vi.fn().mockResolvedValue({ ...comment, content: '更新後の本文' })
+    renderItem({ updateComment }, 7)
 
     await fireEvent.click(screen.getByTestId('comment-edit-button-1'))
     await fireEvent.update(screen.getByTestId('comment-edit-content-1'), '更新後の本文')
     await fireEvent.click(screen.getByTestId('comment-edit-save-1'))
 
-    expect(emitted().update).toEqual([[{ content: '更新後の本文', image: undefined, removeImage: false }]])
-    expect(screen.queryByTestId('comment-edit-content-1')).not.toBeInTheDocument()
+    expect(updateComment).toHaveBeenCalledWith({
+      content: '更新後の本文',
+      image: undefined,
+      removeImage: false,
+    })
+    await vi.waitFor(() => {
+      expect(screen.queryByTestId('comment-edit-content-1')).not.toBeInTheDocument()
+    })
+  })
+
+  it('保存に失敗した場合は編集フォームを開いたままエラーを表示する（入力内容を破棄しない）', async () => {
+    const updateComment = vi.fn().mockResolvedValue(null)
+    renderItem({ updateComment }, 7)
+
+    await fireEvent.click(screen.getByTestId('comment-edit-button-1'))
+    await fireEvent.update(screen.getByTestId('comment-edit-content-1'), '保存できない本文')
+    await fireEvent.click(screen.getByTestId('comment-edit-save-1'))
+
+    await vi.waitFor(() => {
+      expect(screen.getByTestId('comment-edit-error-1')).toBeInTheDocument()
+    })
+    // 編集フォームは開いたまま、入力した内容も残っている
+    expect(screen.getByTestId('comment-edit-content-1')).toHaveValue('保存できない本文')
   })
 
   it('キャンセルを押すと編集を破棄し表示モードに戻る', async () => {
@@ -91,6 +118,23 @@ describe('CommentListItem', () => {
 
     expect(screen.queryByTestId('comment-edit-content-1')).not.toBeInTheDocument()
     expect(screen.getByText('コメント本文です')).toBeInTheDocument()
+  })
+
+  it('画像を選んでからキャンセルすると、選んだ画像のプレビューURLを解放する', async () => {
+    renderItem({}, 7)
+    await fireEvent.click(screen.getByTestId('comment-edit-button-1'))
+
+    const file = new File([new Uint8Array(10)], 'a.jpg', { type: 'image/jpeg' })
+    await fireEvent.change(screen.getByTestId('comment-edit-image-input-1'), {
+      target: { files: [file] },
+    })
+    expect(screen.getByAltText('新しい画像のプレビュー')).toBeInTheDocument()
+
+    const revokeSpy = vi.spyOn(URL, 'revokeObjectURL')
+    await fireEvent.click(screen.getByTestId('comment-edit-cancel-1'))
+
+    expect(revokeSpy).toHaveBeenCalledWith('blob:mock-url')
+    revokeSpy.mockRestore()
   })
 
   it('削除ボタンは確認ダイアログでOKした場合のみdeleteをemitする', async () => {

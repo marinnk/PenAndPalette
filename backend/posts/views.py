@@ -77,10 +77,10 @@ class PostDetailView(APIView):
         post = get_owned_object_or_404(self, request, Post, pk=post_id)
         # post.delete()の前にURLを収集しておく必要がある（削除後はpost.images・
         # post.commentsを辿れない）
+        # delete_images_best_effortはNone/空文字を「削除対象なし」として無視するため、
+        # ここでimage_url__isnull=True等を除外する必要はない
         image_urls = list(post.images.values_list("image_url", flat=True))
-        comment_image_urls = list(
-            post.comments.exclude(image_url__isnull=True).values_list("image_url", flat=True)
-        )
+        comment_image_urls = list(post.comments.values_list("image_url", flat=True))
         # comments・likes・wants・post_imagesはON DELETE CASCADEで自動的に削除される。
         # ただしS3上の実ファイル（投稿画像・コメント画像）はCASCADEでは消えないため、
         # 下でアプリケーション側から明示的に削除する

@@ -1052,9 +1052,11 @@ code {
   display: block;
 }
 
-.comment-item-edit textarea {
+/* コメントのインライン編集・投稿フォームのテキストエリアは見た目が同じなので共有する
+   （幅の取り方だけそれぞれのレイアウトに合わせて上書きする） */
+.comment-item-edit textarea,
+.comment-compose-row textarea {
   box-sizing: border-box;
-  width: 100%;
   padding: 8px 10px;
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -1064,15 +1066,34 @@ code {
   resize: vertical;
 }
 
-.comment-edit-image-add {
-  display: inline-block;
-  margin-top: 8px;
+.comment-item-edit textarea {
+  width: 100%;
+}
+
+.comment-compose-row textarea {
+  flex: 1;
+}
+
+/* 「画像を追加」ボタンも同様に見た目を共有する */
+.comment-edit-image-add,
+.comment-compose-image-add {
   padding: 6px 12px;
   border: 1px solid var(--border);
   border-radius: 6px;
   color: var(--text-h);
   font-size: 13px;
   cursor: pointer;
+}
+
+.comment-edit-image-add {
+  display: inline-block;
+  margin-top: 8px;
+}
+
+.comment-compose-image-add {
+  flex-shrink: 0;
+  align-self: center;
+  white-space: nowrap;
 }
 
 /* S05 投稿詳細画面: コメント投稿フォーム（画面設計書186〜188行目のコンパクトな1行レイアウト） */
@@ -1086,30 +1107,6 @@ code {
   display: flex;
   align-items: flex-start;
   gap: 8px;
-}
-
-.comment-compose-row textarea {
-  box-sizing: border-box;
-  flex: 1;
-  padding: 8px 10px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--text-h);
-  background: var(--bg);
-  font: inherit;
-  resize: vertical;
-}
-
-.comment-compose-image-add {
-  flex-shrink: 0;
-  align-self: center;
-  padding: 6px 12px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--text-h);
-  font-size: 13px;
-  cursor: pointer;
-  white-space: nowrap;
 }
 
 /* コメントのインライン編集・投稿フォームの画像プレビューは見た目が同じなので共有する */

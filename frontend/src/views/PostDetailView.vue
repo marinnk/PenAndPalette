@@ -35,7 +35,8 @@ const {
   composeImageError,
   submitting,
   fieldErrors,
-  errorMessage,
+  composeError,
+  actionError,
   isPending,
   fetchComments,
   addComposeImage,
@@ -114,13 +115,13 @@ watch(
         <p v-if="commentsError" class="field-error" data-testid="comments-fetch-error">
           {{ commentsError }}
         </p>
-        <p v-if="errorMessage" class="field-error" data-testid="comment-error">
-          {{ errorMessage }}
+        <p v-if="actionError" class="field-error" data-testid="comment-error">
+          {{ actionError }}
         </p>
         <CommentList
           :comments="comments"
           :is-pending="isPending"
-          @update="updateComment"
+          :update-comment="updateComment"
           @delete="handleCommentDelete"
         />
         <CommentComposeForm
@@ -128,6 +129,7 @@ watch(
           :image-preview="composeImagePreview"
           :submitting="submitting"
           :field-errors="fieldErrors"
+          :error-message="composeError"
           :image-pick-error="composeImageError"
           @update:content="composeContent = $event"
           @add-image="addComposeImage"

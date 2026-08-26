@@ -140,9 +140,10 @@ class Want(PostReaction):
 class CommentManager(models.Manager):
     def list_for_post(self, post_id):
         """指定した投稿のコメントを古い順（id昇順）・コメント者情報込みで1回のJOINクエリ
-        で取得する（基本設計書6.4章）。
+        で取得する（基本設計書6.4章）。Meta.ordering（id昇順）に暗黙で頼らず、
+        呼び出し側の意図（古い順）が読み取れるよう明示的にorder_byする
         """
-        return self.filter(post_id=post_id).select_related("user")
+        return self.filter(post_id=post_id).select_related("user").order_by("id")
 
 
 class Comment(models.Model):

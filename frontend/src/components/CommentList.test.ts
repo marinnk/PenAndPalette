@@ -31,7 +31,12 @@ function renderList(props: Record<string, unknown> = {}) {
     routes: [{ path: '/profile/:id', name: 'profile', component: ProfileStub }],
   })
   return render(CommentList, {
-    props: { comments: [], isPending: () => false, ...props },
+    props: {
+      comments: [],
+      isPending: () => false,
+      updateComment: vi.fn().mockResolvedValue(null),
+      ...props,
+    },
     global: { plugins: [pinia, router] },
   })
 }
@@ -63,7 +68,7 @@ describe('CommentList', () => {
     expect(items[1]).toHaveTextContent('2件目')
   })
 
-  it('子コンポーネントのupdate/deleteをコメントidとともに中継する', async () => {
+  it('子コンポーネントのdeleteをコメントidとともに中継する', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     // author.id=999はrenderListが設定するcurrentUser.idと一致させ、自分のコメントとして
     // 削除ボタンを表示させる
@@ -75,5 +80,20 @@ describe('CommentList', () => {
 
     expect(emitted().delete).toEqual([[5]])
     vi.restoreAllMocks()
+  })
+
+  it('updateCommentプロパティにコメントidを束縛してCommentListItemへ橋渡しする', async () => {
+    const updateComment = vi.fn().mockResolvedValue({ ...makeComment({ id: 5 }), content: '更新後' })
+    const own = { id: 999, username: 'viewer', display_name: '閲覧者', avatar_url: null }
+    renderList({ comments: [makeComment({ id: 5, author: own })], updateComment })
+
+    await fireEvent.click(screen.getByTestId('comment-edit-button-5'))
+    await fireEvent.update(screen.getByTestId('comment-edit-content-5'), '更新後')
+    await fireEvent.click(screen.getByTestId('comment-edit-save-5'))
+
+    expect(updateComment).toHaveBeenCalledWith(
+      5,
+      expect.objectContaining({ content: '更新後' }),
+    )
   })
 })

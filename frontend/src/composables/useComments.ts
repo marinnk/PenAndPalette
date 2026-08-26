@@ -16,6 +16,11 @@ export function useComments() {
   const comments = ref<Comment[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
+  // 直近で開始したfetchComments呼び出しのpostId。複数の投稿間を素早く行き来した場合に、
+  // 後から発行したリクエストより前のリクエストの応答が遅れて返ってくる（ネットワークの
+  // 遅延・順序入れ替わり）ことがあるため、応答を反映する直前に「これはまだ最新の要求か」を
+  // 確認し、古い応答が新しい投稿のコメントを上書きしてしまうのを防ぐ
+  let latestRequestedPostId = 0
 
   // コメント投稿フォームの下書き状態。usePostCreateのbody/imagesと同じ形で、
   // composableがフォームの入力状態ごと持つことでCommentComposeFormを純粋な表示専用に保てる
@@ -27,7 +32,11 @@ export function useComments() {
 
   const submitting = ref(false)
   const fieldErrors = ref<Record<string, string[]>>({})
-  const errorMessage = ref<string | null>(null)
+  // コメント投稿（下のCommentComposeForm）専用のエラー。更新・削除のエラーとは表示場所が
+  // 異なる（投稿フォームの直下 vs 一覧上部の共通バナー）ため、混ざらないよう別のrefにする
+  const composeError = ref<string | null>(null)
+  // コメントの編集・削除（一覧側の操作）で共有するエラー
+  const actionError = ref<string | null>(null)
 
   // 編集・削除の二重送信防止（usePostReactions.useReactablePostsのpendingIdsと同じ考え方）
   const pendingIds = ref<Set<number>>(new Set())
@@ -37,20 +46,25 @@ export function useComments() {
   }
 
   async function fetchComments(postId: number) {
+    latestRequestedPostId = postId
     loading.value = true
     error.value = null
     // 別の投稿へ遷移した直後は、前の投稿のコメントを残したまま新しいコメントの取得を
     // 待たせない（usePostDetail.loadは投稿本体を並行して取得しており、そちらが先に
     // 終わるとloadingがfalseになりCommentListが描画されうるため、ここで空にしておかないと
-    // 前の投稿のコメントが一瞬または取得失敗時にずっと表示されたままになってしまう）
+    // 前の投稿のコメントが一瞬表示されたままになってしまう）
     comments.value = []
     try {
       const { data } = await apiClient.get<Comment[]>(`/api/posts/${postId}/comments`)
+      // 応答が返ってきた時点で、既にもっと新しい投稿への切り替えが始まっていたら
+      // （古い応答が後から届いた場合）、この結果は捨てる
+      if (postId !== latestRequestedPostId) return
       comments.value = data
     } catch {
+      if (postId !== latestRequestedPostId) return
       error.value = 'コメントの取得に失敗しました。'
     } finally {
-      loading.value = false
+      if (postId === latestRequestedPostId) loading.value = false
     }
   }
 
@@ -71,7 +85,7 @@ export function useComments() {
   }
 
   async function submitComment(postId: number): Promise<Comment | null> {
-    errorMessage.value = null
+    composeError.value = null
     fieldErrors.value = {}
     submitting.value = true
     try {
@@ -87,7 +101,7 @@ export function useComments() {
     } catch (err) {
       fieldErrors.value = extractFieldErrors(err)
       if (Object.keys(fieldErrors.value).length === 0) {
-        errorMessage.value =
+        composeError.value =
           extractNonFieldError(err) ?? extractDetail(err) ?? 'コメントの投稿に失敗しました。'
       }
       return null
@@ -102,7 +116,7 @@ export function useComments() {
   ): Promise<Comment | null> {
     if (isPending(id)) return null
     pendingIds.value.add(id)
-    errorMessage.value = null
+    actionError.value = null
     try {
       const formData = new FormData()
       if (payload.content.trim()) formData.append('content', payload.content)
@@ -114,11 +128,10 @@ export function useComments() {
       if (index !== -1) comments.value[index] = data
       return data
     } catch (err) {
-      // fieldErrors（コメント投稿フォームと共有している状態）はここでは更新しない。
-      // 更新対象は一覧中の特定の1件で、投稿フォーム側にその内容が紛れ込むと誤解を招くため、
-      // フィールド別メッセージはまとめてerrorMessageの文言に含める
+      // フィールド別メッセージ（例：本文の文字数制限）も、一覧中の特定の1件に対する
+      // エラーとして表示先が無いため、まとめて1つの文言にしてactionErrorに載せる
       const fieldMessages = Object.values(extractFieldErrors(err)).flat().join(' ')
-      errorMessage.value =
+      actionError.value =
         fieldMessages || extractNonFieldError(err) || extractDetail(err) || 'コメントの更新に失敗しました。'
       return null
     } finally {
@@ -129,13 +142,13 @@ export function useComments() {
   async function removeComment(id: number): Promise<boolean> {
     if (isPending(id)) return false
     pendingIds.value.add(id)
-    errorMessage.value = null
+    actionError.value = null
     try {
       await apiClient.delete(`/api/comments/${id}`)
       comments.value = comments.value.filter((c) => c.id !== id)
       return true
     } catch (err) {
-      errorMessage.value = extractDetail(err) ?? '削除に失敗しました。もう一度お試しください。'
+      actionError.value = extractDetail(err) ?? '削除に失敗しました。もう一度お試しください。'
       return false
     } finally {
       pendingIds.value.delete(id)
@@ -152,7 +165,8 @@ export function useComments() {
     composeImageError,
     submitting,
     fieldErrors,
-    errorMessage,
+    composeError,
+    actionError,
     isPending,
     fetchComments,
     addComposeImage,

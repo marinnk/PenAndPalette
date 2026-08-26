@@ -3,10 +3,20 @@ import CommentListItem from '@/components/CommentListItem.vue'
 import type { Comment } from '@/types/comment'
 
 // S05 投稿詳細画面のコメント一覧（画面設計書182〜185行目）。表示のみを担い、
-// 実際のAPI呼び出しは親（PostDetailView）がuseComments経由で行う
-defineProps<{ comments: Comment[]; isPending: (id: number) => boolean }>()
+// 実際のAPI呼び出しは親（PostDetailView）がuseComments経由で行う。
+//
+// updateCommentは関数プロパティとして各CommentListItemにそのまま橋渡しする
+// （comment.idを束縛するだけ）：CommentListItem自身が保存の成否に応じて編集モードの
+// 終了を判断する必要があるため、fire-and-forgetなemitではなく戻り値を待てる形にしている
+defineProps<{
+  comments: Comment[]
+  isPending: (id: number) => boolean
+  updateComment: (
+    id: number,
+    payload: { content: string; image?: File; removeImage?: boolean },
+  ) => Promise<Comment | null>
+}>()
 const emit = defineEmits<{
-  update: [id: number, payload: { content: string; image?: File; removeImage?: boolean }]
   delete: [id: number]
 }>()
 </script>
@@ -20,7 +30,7 @@ const emit = defineEmits<{
         :key="comment.id"
         :comment="comment"
         :pending="isPending(comment.id)"
-        @update="(payload) => emit('update', comment.id, payload)"
+        :update-comment="(payload) => updateComment(comment.id, payload)"
         @delete="emit('delete', comment.id)"
       />
     </ul>

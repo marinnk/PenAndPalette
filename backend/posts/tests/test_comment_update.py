@@ -79,6 +79,23 @@ class CommentUpdateTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.json()["image_url"], "https://example.com/1.jpg")
 
+    def test_update_without_content_field_keeps_existing_content(self):
+        # contentキー自体を送らない場合（空文字を明示的に送るのとは違う）は、既存の本文を
+        # 維持する。imageを省略した場合に既存画像を維持するのと同じ挙動に揃える
+        comment = create_comment(
+            self.post, self.user, content="既存の本文", image_url="https://example.com/1.jpg"
+        )
+        self._login()
+
+        response = self.client.put(
+            self._url(comment.id), {"remove_image": "false"}, format="multipart"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.json()["content"], "既存の本文")
+        comment.refresh_from_db()
+        self.assertEqual(comment.content, "既存の本文")
+
     def test_update_replaces_image(self):
         comment = create_comment(
             self.post, self.user, content="画像付き", image_url="https://example.com/old.jpg"

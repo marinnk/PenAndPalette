@@ -8,12 +8,26 @@ import { pickFileFromInput } from '@/lib/fileInput'
 import type { Comment } from '@/types/comment'
 
 // S05 投稿詳細画面のコメント1件分の表示。comment.md 4.2の通り、編集は別画面へ遷移せず
-// このコンポーネント内でisEditingを切り替えてその場（インライン）で行う
-const props = withDefaults(defineProps<{ comment: Comment; pending?: boolean }>(), {
-  pending: false,
-})
+// このコンポーネント内でisEditingを切り替えてその場（インライン）で行う。
+//
+// updateCommentは関数プロパティとして受け取る（emitの発火だけで終わらせない）：更新の
+// 成否をこのコンポーネント自身が判断してisEditingを制御する必要がある（保存に失敗した場合、
+// 編集内容を破棄せず編集フォームを開いたままにする）ため、結果を受け取れるPromiseベースの
+// 関数呼び出しにしている。deleteは結果に応じたこのコンポーネント側の状態変化が無いため、
+// 従来通りemitのままでよい
+const props = withDefaults(
+  defineProps<{
+    comment: Comment
+    pending?: boolean
+    updateComment: (payload: {
+      content: string
+      image?: File
+      removeImage?: boolean
+    }) => Promise<Comment | null>
+  }>(),
+  { pending: false },
+)
 const emit = defineEmits<{
-  update: [payload: { content: string; image?: File; removeImage?: boolean }]
   delete: []
 }>()
 
@@ -27,6 +41,7 @@ const { preview: editImagePreview, setFile: setEditImagePreview, clear: clearEdi
   useSingleImagePreview()
 const removeImage = ref(false)
 const imageError = ref<string | null>(null)
+const saveError = ref<string | null>(null)
 
 function startEditing() {
   editContent.value = props.comment.content
@@ -34,10 +49,12 @@ function startEditing() {
   clearEditImagePreview()
   removeImage.value = false
   imageError.value = null
+  saveError.value = null
   isEditing.value = true
 }
 
 function cancelEditing() {
+  clearEditImagePreview()
   isEditing.value = false
 }
 
@@ -62,13 +79,21 @@ function onRemoveExistingImage() {
   clearEditImagePreview()
 }
 
-function onSave() {
-  emit('update', {
+async function onSave() {
+  saveError.value = null
+  const result = await props.updateComment({
     content: editContent.value,
     image: editImage.value,
     removeImage: removeImage.value,
   })
-  isEditing.value = false
+  if (result) {
+    // 保存成功時のみ編集モードを終える。失敗時は入力内容を破棄せず、編集フォームを
+    // 開いたままエラーを示す（そのまま保存し直せるようにする）
+    clearEditImagePreview()
+    isEditing.value = false
+  } else {
+    saveError.value = '更新に失敗しました。もう一度お試しください。'
+  }
 }
 
 function onDeleteClick() {
@@ -160,6 +185,9 @@ function onDeleteClick() {
       </label>
       <p v-if="imageError" class="field-error" :data-testid="`comment-edit-image-error-${comment.id}`">
         {{ imageError }}
+      </p>
+      <p v-if="saveError" class="field-error" :data-testid="`comment-edit-error-${comment.id}`">
+        {{ saveError }}
       </p>
 
       <div class="form-actions">

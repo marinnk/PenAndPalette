@@ -23,10 +23,10 @@ def _or_empty(value: str | None) -> str:
 class PostSerializer(serializers.Serializer):
     """投稿一覧・詳細・作成直後のレスポンス共通のシリアライザ（基本設計書6.3章）。
 
-    like_count・want_count・liked_by_me・wanted_by_meはPost.objects.with_reactions()の
-    annotate()で付与された属性をそのまま読み出す。id等のフィールドと違い、この投稿が
-    ModelSerializerではなくSerializerな理由は、annotateされた属性・SerializerMethodField
-    （body・images・comment_count）が混在しモデルのフィールドだけでは完結しないため。
+    like_count・want_count・comment_count・liked_by_me・wanted_by_meはPost.objects.
+    with_reactions()のannotate()で付与された属性をそのまま読み出す。id等のフィールドと違い、
+    この投稿がModelSerializerではなくSerializerな理由は、annotateされた属性・
+    SerializerMethodField（body・images）が混在しモデルのフィールドだけでは完結しないため。
     """
 
     id = serializers.IntegerField(read_only=True)
@@ -274,12 +274,20 @@ class CommentSerializer(serializers.Serializer):
 class CommentWriteSerializer(serializers.Serializer):
     """CommentCreateSerializer・CommentUpdateSerializerに共通の入力フィールド・検証
     （基本設計書6.4章）。content（0〜280文字）・image（0〜1枚）の少なくとも一方が必須という
-    ルールは両者で同じだが、「更新後に画像が残るか」の判定（既存画像の有無を考慮するか）だけが
-    異なるため、それをhas_image_after_updateとしてサブクラスに委ねる。
+    ルールは両者で同じだが、「保存後に画像が残るか」の判定（既存画像の有無を考慮するか）だけが
+    異なるため、それをresulting_has_imageとしてサブクラスに委ねる。
+
+    contentはdefault=""を持たせない：省略された場合はvalidated_dataに"content"キー自体が
+    現れないというDRFの挙動を利用し、「本文を省略＝変更しない」（Update時）と
+    「本文を明示的に空文字で送る＝本文を消す」を区別できるようにする（PostUpdateSerializerの
+    keep_image_idsと同じ理由。ただしそちらはrequired=Trueで明示を強制する方式、こちらは
+    「省略時は既存を維持」という逆方向のデフォルト動作にしたいためrequired=Falseのまま）。
+    Create時はそもそも既存値が無いため、「省略」も「空文字」も同じ「本文なし」として扱う
+    （validated_data.get("content")で読む）。
     """
 
     content = serializers.CharField(
-        max_length=280, trim_whitespace=True, required=False, allow_blank=True, default=""
+        max_length=280, trim_whitespace=True, required=False, allow_blank=True
     )
     image = serializers.FileField(required=False)
 
@@ -287,11 +295,11 @@ class CommentWriteSerializer(serializers.Serializer):
         validate_image_file(value)
         return value
 
-    def has_image_after_update(self, attrs) -> bool:
+    def resulting_has_image(self, attrs) -> bool:
         return bool(attrs.get("image"))
 
     def validate(self, attrs):
-        if not attrs["content"] and not self.has_image_after_update(attrs):
+        if not attrs.get("content") and not self.resulting_has_image(attrs):
             raise serializers.ValidationError("本文または画像のいずれかを入力してください。")
         return attrs
 
@@ -307,20 +315,21 @@ class CommentCreateSerializer(CommentWriteSerializer):
         return Comment.objects.create(
             post=self.context["post"],
             user=self.context["request"].user,
-            content=validated_data["content"] or None,
+            content=validated_data.get("content") or None,
             image_url=image_url,
         )
 
 
 class CommentUpdateSerializer(CommentWriteSerializer):
     """PUT /api/comments/{comment_id} のリクエストボディ検証・コメント編集を担う
-    （基本設計書6.4章）。multipart/form-data。image（新しい画像に置き換え）・remove_image
-    （trueなら既存画像を削除）のどちらも送らない場合は既存画像をそのまま維持する。
+    （基本設計書6.4章）。multipart/form-data。content・image・remove_imageのいずれも
+    省略した項目は既存の値をそのまま維持する（imageとremove_imageのどちらも送らない場合は
+    既存画像を維持、というAPI設計は元々この方針。contentも同じ扱いに揃える）。
     """
 
     remove_image = serializers.BooleanField(required=False, default=False)
 
-    def has_image_after_update(self, attrs) -> bool:
+    def resulting_has_image(self, attrs) -> bool:
         # 新しい画像が送られていれば残る。remove_image=trueなら常に残らない。
         # どちらでもなければ既存画像の有無をそのまま引き継ぐ
         if attrs.get("image"):
@@ -342,7 +351,10 @@ class CommentUpdateSerializer(CommentWriteSerializer):
             removed_url = instance.image_url
             instance.image_url = None
 
-        instance.content = validated_data["content"] or None
+        # "content"キーが無い＝省略（本文は変更しない）。空文字を含め明示的に送られていれば
+        # そちらを反映する（contentクラスのdocstring参照）
+        if "content" in validated_data:
+            instance.content = validated_data["content"] or None
         instance.save(update_fields=["content", "image_url", "updated_at"])
         instance._removed_image_url = removed_url
         return instance

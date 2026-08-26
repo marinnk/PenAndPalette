@@ -269,6 +269,48 @@ describe('PostDetailView', () => {
     })
   })
 
+  it('コメント投稿に失敗した場合はコメント投稿フォーム自身の枠内にエラーを表示する', async () => {
+    mockGet(() => Promise.resolve({ data: makePost({ comment_count: 0 }) }))
+    await renderPostDetailView()
+    await waitFor(() => screen.getByText('コメント（0件）'))
+
+    vi.mocked(apiClient.post).mockRejectedValueOnce(new Error('network error'))
+    await fireEvent.update(screen.getByTestId('comment-body'), '失敗するコメント')
+    await fireEvent.click(screen.getByTestId('comment-compose-submit'))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('comment-compose-error')).toBeInTheDocument()
+    })
+  })
+
+  it('自分のコメントの編集に失敗した場合は編集フォームを開いたままにする', async () => {
+    const comment = {
+      id: 30,
+      author: { id: 1, username: 'taro', display_name: '太郎', avatar_url: null },
+      content: '編集前',
+      image_url: null,
+      created_at: '2026-08-23T00:00:00Z',
+      updated_at: '2026-08-23T00:00:00Z',
+    }
+    mockGet(
+      () => Promise.resolve({ data: makePost({ comment_count: 1 }) }),
+      () => Promise.resolve({ data: [comment] }),
+    )
+    await renderPostDetailView()
+    await waitFor(() => screen.getByText('編集前'))
+
+    await fireEvent.click(screen.getByTestId('comment-edit-button-30'))
+    vi.mocked(apiClient.put).mockRejectedValueOnce(new Error('network error'))
+    await fireEvent.update(screen.getByTestId('comment-edit-content-30'), '編集後')
+    await fireEvent.click(screen.getByTestId('comment-edit-save-30'))
+
+    await waitFor(() => {
+      // 編集フォームが開いたままで、入力した内容も残っている
+      expect(screen.getByTestId('comment-edit-content-30')).toHaveValue('編集後')
+      expect(screen.getByTestId('comment-edit-error-30')).toBeInTheDocument()
+    })
+  })
+
   it('自分のコメントの削除ボタン→確認後に一覧から消え件数が減る', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     const comment = {
