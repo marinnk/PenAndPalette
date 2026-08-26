@@ -1,6 +1,7 @@
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from posts.models import Post
 from posts.tests.conftest import create_post, create_post_image
 from users.models import Follow
 from users.tests.conftest import DEFAULT_PASSWORD, create_user
@@ -184,3 +185,68 @@ class PostListTests(APITestCase):
 
         row = next(r for r in response.json()["results"] if r["id"] == post.id)
         self.assertEqual(row["images"], ["https://example.com/1.jpg", "https://example.com/2.jpg"])
+
+    def test_post_type_illustration_filters_to_illustration_posts_only(self):
+        self._login()
+        illustration = create_post(self.user, post_type=Post.PostType.ILLUSTRATION)
+        create_post(self.user, post_type=Post.PostType.NOVEL, title="小説投稿", body="本文")
+
+        response = self.client.get(self.url, {"post_type": "illustration"})
+
+        ids = [row["id"] for row in response.json()["results"]]
+        self.assertEqual(ids, [illustration.id])
+
+    def test_post_type_novel_filters_to_novel_posts_only(self):
+        self._login()
+        create_post(self.user, post_type=Post.PostType.ILLUSTRATION)
+        novel = create_post(
+            self.user, post_type=Post.PostType.NOVEL, title="小説投稿", body="本文"
+        )
+
+        response = self.client.get(self.url, {"post_type": "novel"})
+
+        ids = [row["id"] for row in response.json()["results"]]
+        self.assertEqual(ids, [novel.id])
+
+    def test_post_type_omitted_returns_both_types(self):
+        self._login()
+        illustration = create_post(self.user, post_type=Post.PostType.ILLUSTRATION)
+        novel = create_post(
+            self.user, post_type=Post.PostType.NOVEL, title="小説投稿", body="本文"
+        )
+
+        response = self.client.get(self.url)
+
+        ids = {row["id"] for row in response.json()["results"]}
+        self.assertEqual(ids, {illustration.id, novel.id})
+
+    def test_invalid_post_type_returns_400(self):
+        self._login()
+
+        response = self.client.get(self.url, {"post_type": "comic"})
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_post_type_combines_with_scope_following(self):
+        """post_typeはscope（全体／フォロー中）とは独立した軸のため、自由に組み合わせられる
+        （基本設計書6.3章）。
+        """
+        self._login()
+        followee = create_user(
+            username="followee-for-type",
+            email="followee-for-type@example.com",
+            display_name="FolloweeForType",
+        )
+        Follow.objects.create(follower=self.user, followee=followee)
+        followee_novel = create_post(
+            followee, post_type=Post.PostType.NOVEL, title="フォロー中の小説", body="本文"
+        )
+        create_post(followee, post_type=Post.PostType.ILLUSTRATION)
+        create_post(self.user, post_type=Post.PostType.NOVEL, title="自分の小説", body="本文")
+
+        response = self.client.get(self.url, {"scope": "following", "post_type": "novel"})
+
+        ids = [row["id"] for row in response.json()["results"]]
+        self.assertIn(followee_novel.id, ids)
+        for row in response.json()["results"]:
+            self.assertEqual(row["post_type"], "novel")

@@ -1,14 +1,19 @@
 from django.contrib import admin
 
-from posts.models import Comment, Like, Post, PostImage, Want
+from posts.models import Comment, Like, Post, PostImage, Tag, Want
 
 
 @admin.register(Post)
 class PostAdmin(admin.ModelAdmin):
     """開発時にDBの中身を確認するための最小限の登録。"""
 
-    list_display = ["id", "user", "body", "created_at"]
-    search_fields = ["body"]
+    list_display = ["id", "user", "post_type", "title", "body", "created_at"]
+    search_fields = ["title", "body"]
+
+
+@admin.register(Tag)
+class TagAdmin(admin.ModelAdmin):
+    list_display = ["id", "name", "display_order"]
 
 
 @admin.register(PostImage)

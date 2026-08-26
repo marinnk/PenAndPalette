@@ -2,14 +2,19 @@ from django.db import models, transaction
 from rest_framework import serializers
 
 from common.storage import delete_image, upload_image, validate_image_file
-from posts.models import Comment, Post, PostImage
+from posts.models import Comment, Post, PostImage, Tag
 from users.serializers import UserSerializer
 
-# 投稿に添付できる画像の上限枚数（基本設計書6.3章）。PostCreateSerializer・
-# PostUpdateSerializerの両方がこの1箇所を参照する。
-# frontend/src/composables/postImageValidation.ts のMAX_IMAGESがこの値を複製している。
-# 値を変更する場合は両方合わせて変更すること
-MAX_POST_IMAGES = 4
+# 投稿の種別ごとの上限値（基本設計書4.2・6.3章）。PostCreateSerializer・PostUpdateSerializerの
+# 両方がこの1箇所を参照する。frontend/src/composables/postImageValidation.ts のMAX_IMAGESが
+# MAX_POST_IMAGESの値を複製している。値を変更する場合は両方合わせて変更すること
+MAX_POST_IMAGES = 4  # イラスト投稿の画像上限（従来からの名前をそのまま維持）
+MAX_ILLUSTRATION_IMAGES = MAX_POST_IMAGES
+MAX_NOVEL_IMAGES = 1  # 小説投稿のカバー画像上限
+MAX_ILLUSTRATION_BODY_LENGTH = 280
+MAX_NOVEL_BODY_LENGTH = 4000
+MAX_TITLE_LENGTH = 100
+MAX_POST_TAGS = 5
 
 
 def _or_empty(value: str | None) -> str:
@@ -18,6 +23,15 @@ def _or_empty(value: str | None) -> str:
     PostSummarySerializer・CommentSerializerで共通）。
     """
     return value or ""
+
+
+class TagSerializer(serializers.Serializer):
+    """GET /api/tags のレスポンス整形（基本設計書6.11章）。固定の分類タグ一覧で、
+    利用者による作成・編集はできないため書き込み用フィールドは持たない。
+    """
+
+    id = serializers.IntegerField(read_only=True)
+    name = serializers.CharField(read_only=True)
 
 
 class PostSerializer(serializers.Serializer):
@@ -31,9 +45,12 @@ class PostSerializer(serializers.Serializer):
 
     id = serializers.IntegerField(read_only=True)
     author = UserSerializer(source="user", read_only=True)
+    post_type = serializers.CharField(read_only=True)
+    title = serializers.SerializerMethodField()
     body = serializers.SerializerMethodField()
     images = serializers.SerializerMethodField()
     image_ids = serializers.SerializerMethodField()
+    tags = serializers.SerializerMethodField()
     like_count = serializers.IntegerField(read_only=True)
     want_count = serializers.IntegerField(read_only=True)
     comment_count = serializers.IntegerField(read_only=True)
@@ -41,6 +58,9 @@ class PostSerializer(serializers.Serializer):
     wanted_by_me = serializers.BooleanField(read_only=True)
     created_at = serializers.DateTimeField(read_only=True)
     updated_at = serializers.DateTimeField(read_only=True)
+
+    def get_title(self, obj):
+        return _or_empty(obj.title)
 
     def get_body(self, obj):
         return _or_empty(obj.body)
@@ -62,6 +82,18 @@ class PostSerializer(serializers.Serializer):
         # imagesと同じ並び順（どちらもdisplay_order順）のid配列。投稿編集画面で
         # 「残す既存画像」を指定するkeep_image_idsに使う（基本設計書6.3章）
         return [image.id for image in self._resolve_images(obj)]
+
+    def _resolve_tags(self, obj):
+        # _resolve_imagesと同じ理由。作成直後はPostCreateSerializer.create()でセットした
+        # _created_tagsを使い、一覧・詳細はwith_reactions()のprefetch_related（display_order
+        # 順にPrefetch済み）でキャッシュ済みのobj.tags.all()を使う
+        tags = getattr(obj, "_created_tags", None)
+        if tags is None:
+            tags = obj.tags.all()
+        return tags
+
+    def get_tags(self, obj):
+        return [{"id": tag.id, "name": tag.name} for tag in self._resolve_tags(obj)]
 
 
 class PostSummarySerializer(serializers.Serializer):
@@ -102,28 +134,113 @@ class WantReactionSerializer(serializers.Serializer):
     wanted_by_me = serializers.BooleanField(read_only=True)
 
 
-class PostCreateSerializer(serializers.Serializer):
-    """POST /api/posts のリクエストボディ検証・投稿作成を担う（基本設計書6.3章）。
-    multipart/form-data。body（0〜280文字）・images（0〜4枚）の少なくとも一方が必須。
+class PostTypeValidationMixin:
+    """PostCreateSerializer・PostUpdateSerializerに共通の、投稿種別ごとの入力ルール検証
+    （基本設計書4.2・6.3章）。
+
+    - イラスト投稿：タイトルは送らない（送ると400）。本文は任意（0〜280文字）。
+      画像は1〜4枚必須
+    - 小説投稿：タイトルは必須（1〜100文字）。本文は必須（1〜4000文字）。
+      画像は0〜1枚（カバー画像）
+
+    「イラスト投稿にタイトルを送る」のような想定外の組み合わせは、既存のuser_id+
+    scope=following同時指定や自己フォローと同様、黙って無視・正規化せず400にして
+    気づけるようにする。
     """
 
-    MAX_IMAGES = MAX_POST_IMAGES
+    def validate_title_and_body_for_type(self, attrs):
+        post_type = attrs["post_type"]
+        title = attrs["title"]
+        body = attrs["body"]
+        if post_type == Post.PostType.NOVEL:
+            if not title:
+                raise serializers.ValidationError({"title": ["小説投稿ではタイトルは必須です。"]})
+            if not body:
+                raise serializers.ValidationError({"body": ["小説投稿では本文は必須です。"]})
+        else:
+            if title:
+                raise serializers.ValidationError(
+                    {"title": ["イラスト投稿ではタイトルを指定できません。"]}
+                )
+            if len(body) > MAX_ILLUSTRATION_BODY_LENGTH:
+                raise serializers.ValidationError(
+                    {"body": [f"イラスト投稿の本文は{MAX_ILLUSTRATION_BODY_LENGTH}文字までです。"]}
+                )
 
+    def validate_image_count_for_type(self, post_type, image_count):
+        if post_type == Post.PostType.NOVEL:
+            if image_count > MAX_NOVEL_IMAGES:
+                raise serializers.ValidationError(
+                    {"images": [f"小説投稿の画像は{MAX_NOVEL_IMAGES}枚までです。"]}
+                )
+        else:
+            if not (1 <= image_count <= MAX_ILLUSTRATION_IMAGES):
+                raise serializers.ValidationError(
+                    {
+                        "images": [
+                            f"イラスト投稿では画像を1〜{MAX_ILLUSTRATION_IMAGES}枚添付してください。"
+                        ]
+                    }
+                )
+
+    def check_tag_ids(self, ids):
+        """tag_idsの共通チェック（件数・重複・実在）。PostCreateSerializer.validate_tag_ids
+        （ListField）・PostUpdateSerializer.validate_tag_ids（CSV文字列をパース後）の
+        どちらからも呼ばれる。
+        """
+        if len(ids) > MAX_POST_TAGS:
+            raise serializers.ValidationError(f"タグは{MAX_POST_TAGS}個まで選択できます。")
+        if len(set(ids)) != len(ids):
+            raise serializers.ValidationError("同じタグを複数指定することはできません。")
+        valid_ids = set(Tag.objects.filter(id__in=ids).values_list("id", flat=True))
+        if set(ids) - valid_ids:
+            raise serializers.ValidationError("指定されたタグが見つかりません。")
+        return ids
+
+
+class PostCreateSerializer(PostTypeValidationMixin, serializers.Serializer):
+    """POST /api/posts のリクエストボディ検証・投稿作成を担う（基本設計書6.3章）。
+    multipart/form-data。post_type（'illustration'または'novel'）必須で、
+    title・body・imagesの入力ルールは種別ごとに異なる（PostTypeValidationMixin参照）。
+    """
+
+    post_type = serializers.ChoiceField(
+        choices=Post.PostType.choices,
+        error_messages={
+            "required": "post_typeは必須です。",
+            "invalid_choice": "post_typeはillustrationまたはnovelを指定してください。",
+        },
+    )
+    title = serializers.CharField(
+        max_length=MAX_TITLE_LENGTH,
+        trim_whitespace=True,
+        required=False,
+        allow_blank=True,
+        default="",
+    )
     body = serializers.CharField(
-        max_length=280, trim_whitespace=True, required=False, allow_blank=True, default=""
+        max_length=MAX_NOVEL_BODY_LENGTH,
+        trim_whitespace=True,
+        required=False,
+        allow_blank=True,
+        default="",
     )
     images = serializers.ListField(child=serializers.FileField(), required=False, default=list)
+    tag_ids = serializers.ListField(child=serializers.IntegerField(), required=False, default=list)
 
     def validate_images(self, value):
-        if len(value) > self.MAX_IMAGES:
-            raise serializers.ValidationError(f"画像は{self.MAX_IMAGES}枚まで添付できます。")
+        # 枚数の上限は投稿種別により異なるため、ここでは形式・サイズのみ検証する
+        # （枚数チェックはvalidate()でpost_typeと合わせて行う）
         for image in value:
             validate_image_file(image)
         return value
 
+    def validate_tag_ids(self, value):
+        return self.check_tag_ids(value)
+
     def validate(self, attrs):
-        if not attrs["body"] and not attrs["images"]:
-            raise serializers.ValidationError("本文または画像のいずれかを入力してください。")
+        self.validate_title_and_body_for_type(attrs)
+        self.validate_image_count_for_type(attrs["post_type"], len(attrs["images"]))
         return attrs
 
     @transaction.atomic
@@ -134,7 +251,10 @@ class PostCreateSerializer(serializers.Serializer):
         # （アップロード先はDBトランザクションの対象外のため）。取りこぼした投稿が
         # 一覧に見えてしまう不整合は防げるが、孤立したファイルの後始末は今回のスコープ外とする
         post = Post.objects.create(
-            user=self.context["request"].user, body=validated_data["body"] or None
+            user=self.context["request"].user,
+            post_type=validated_data["post_type"],
+            title=validated_data["title"] or None,
+            body=validated_data["body"] or None,
         )
         images = [
             PostImage(
@@ -144,20 +264,38 @@ class PostCreateSerializer(serializers.Serializer):
         ]
         # 画像1枚ごとにINSERTするのではなく、まとめて1回のクエリで保存する
         PostImage.objects.bulk_create(images)
-        # 作成直後のシリアライズ（PostSerializer.get_images）で再クエリしなくて済むよう、
-        # 作成したPostImageのリストをその場でPostインスタンスに持たせておく
+        tag_ids = validated_data["tag_ids"]
+        post.tags.set(tag_ids)
+        # 作成直後のシリアライズ（PostSerializer.get_images・get_tags）で再クエリしなくて
+        # 済むよう、作成したPostImage・タグのリストをその場でPostインスタンスに持たせておく
         post._created_images = images
+        post._created_tags = Tag.objects.filter(id__in=tag_ids).order_by("display_order")
         return post
 
 
-class PostUpdateSerializer(serializers.Serializer):
+class PostUpdateSerializer(PostTypeValidationMixin, serializers.Serializer):
     """PUT /api/posts/{post_id} のリクエストボディ検証・投稿編集を担う（基本設計書6.3章）。
     multipart/form-data。既存画像はファイルとして再送信させず、keep_image_ids（残す既存画像の
     idをカンマ区切りで指定）で指定する。新規追加分のみimagesでファイルを送る。
+
+    post_typeは作成時に固定され編集では変更できないため、フィールドとして持たない
+    （PUTボディに含まれていても無視される）。title・body・imagesの入力ルールは
+    self.instance.post_typeに基づき種別ごとに検証する（PostTypeValidationMixin参照）。
     """
 
+    title = serializers.CharField(
+        max_length=MAX_TITLE_LENGTH,
+        trim_whitespace=True,
+        required=False,
+        allow_blank=True,
+        default="",
+    )
     body = serializers.CharField(
-        max_length=280, trim_whitespace=True, required=False, allow_blank=True, default=""
+        max_length=MAX_NOVEL_BODY_LENGTH,
+        trim_whitespace=True,
+        required=False,
+        allow_blank=True,
+        default="",
     )
     # required=True: 省略・空文字を区別できないと「省略＝画像は変更しない」つもりの呼び出しが
     # 「keep_ids=[] → 既存画像を全削除」になってしまう危険な仕様になる（本文だけ直すつもりが
@@ -165,6 +303,13 @@ class PostUpdateSerializer(serializers.Serializer):
     # 「省略」と「意図的に0件」を区別できるようにする
     keep_image_ids = serializers.CharField(allow_blank=True)
     images = serializers.ListField(child=serializers.FileField(), required=False, default=list)
+    # tag_idsもkeep_image_idsと同じ理由でrequired=True・カンマ区切り文字列にする：
+    # 省略時に「既存のタグ付けを維持する」のか「タグを全解除する」のか曖昧にしないため、
+    # 編集のたびに希望するタグの集合全体を明示的に送らせる。ListFieldのままrequired=Trueに
+    # すると、multipart/form-dataでは「空リストを明示的に送る」という表現ができず
+    # （フィールド自体が送信されないのと区別が付かない）、keep_image_idsと同じCSV文字列
+    # 方式にする必要がある
+    tag_ids = serializers.CharField(allow_blank=True)
 
     def validate_keep_image_ids(self, value):
         if not value:
@@ -180,19 +325,29 @@ class PostUpdateSerializer(serializers.Serializer):
             raise serializers.ValidationError("指定された画像がこの投稿に存在しません。")
         return ids
 
+    def validate_tag_ids(self, value):
+        if not value:
+            return []
+        try:
+            ids = [int(token) for token in value.split(",") if token.strip()]
+        except ValueError:
+            raise serializers.ValidationError(
+                "tag_idsは数値をカンマ区切りで指定してください。"
+            ) from None
+        return self.check_tag_ids(ids)
+
     def validate_images(self, value):
-        if len(value) > MAX_POST_IMAGES:
-            raise serializers.ValidationError(f"画像は{MAX_POST_IMAGES}枚まで添付できます。")
+        # 枚数の上限は投稿種別により異なるため、ここでは形式・サイズのみ検証する
+        # （枚数チェックはvalidate()でpost_typeと合わせて行う）
         for image in value:
             validate_image_file(image)
         return value
 
     def validate(self, attrs):
+        post_type = self.instance.post_type
+        self.validate_title_and_body_for_type({**attrs, "post_type": post_type})
         total_images = len(attrs.get("keep_image_ids", [])) + len(attrs.get("images", []))
-        if total_images > MAX_POST_IMAGES:
-            raise serializers.ValidationError(f"画像は{MAX_POST_IMAGES}枚まで添付できます。")
-        if not attrs["body"] and total_images == 0:
-            raise serializers.ValidationError("本文または画像のいずれかを入力してください。")
+        self.validate_image_count_for_type(post_type, total_images)
         return attrs
 
     @transaction.atomic
@@ -207,9 +362,11 @@ class PostUpdateSerializer(serializers.Serializer):
             instance.images.exclude(id__in=keep_ids).values_list("image_url", flat=True)
         )
 
+        instance.title = validated_data["title"] or None
         instance.body = validated_data["body"] or None
-        instance.save(update_fields=["body", "updated_at"])
+        instance.save(update_fields=["title", "body", "updated_at"])
         instance.images.exclude(id__in=keep_ids).delete()
+        instance.tags.set(validated_data["tag_ids"])
 
         next_order = instance.images.aggregate(models.Max("display_order"))["display_order__max"]
         next_order = 0 if next_order is None else next_order + 1
@@ -248,6 +405,9 @@ class PostListQuerySerializer(serializers.Serializer):
     after_id = serializers.IntegerField(required=False, min_value=0)
     user_id = serializers.IntegerField(required=False, min_value=1)
     scope = serializers.ChoiceField(choices=["all", "following"], required=False)
+    # post_type：全体／フォロー中（scope）とは独立した軸のため、相互排他チェックは設けない
+    # （基本設計書6.3章：scope=following&post_type=novel のように自由に組み合わせられる）
+    post_type = serializers.ChoiceField(choices=Post.PostType.choices, required=False)
 
     def validate(self, attrs):
         if attrs.get("before_id") is not None and attrs.get("after_id") is not None:
