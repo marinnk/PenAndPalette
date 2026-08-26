@@ -100,6 +100,16 @@ function onDeleteClick() {
         </span>
       </span>
     </div>
+    <p
+      v-if="post.post_type === 'novel' && post.title"
+      class="post-card-title"
+      data-testid="post-title"
+    >
+      【{{ post.title }}】
+    </p>
+    <p v-if="post.tags.length > 0" class="post-card-tags" data-testid="post-tags">
+      <span v-for="tag in post.tags" :key="tag.id" class="post-card-tag">#{{ tag.name }}</span>
+    </p>
     <p v-if="post.body" class="post-card-body">{{ post.body }}</p>
     <div
       v-if="post.images.length > 0"

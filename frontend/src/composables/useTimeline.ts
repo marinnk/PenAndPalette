@@ -2,7 +2,7 @@ import { ref } from 'vue'
 import { apiClient } from '@/lib/apiClient'
 import { useReactablePosts } from '@/composables/usePostReactions'
 import { useDeletablePosts } from '@/composables/usePostDelete'
-import type { Post, PostListResponse, TimelineScope } from '@/types/post'
+import type { Post, PostListResponse, PostType, TimelineScope } from '@/types/post'
 
 const POLL_INTERVAL_MS = 30_000
 const PAGE_SIZE = 20
@@ -17,6 +17,8 @@ export function useTimeline() {
   const loadingMore = ref(false)
   const error = ref(false)
   const scope = ref<TimelineScope>('all')
+  // 「全体／フォロー中」（scope）とは独立した軸。組み合わせて絞り込める（画面設計書114〜145行目）
+  const postType = ref<PostType>('illustration')
   // バナーに表示する新着件数。反映（revealNewPosts）されるまで一覧には混ぜない
   const newPostCount = ref(0)
 
@@ -48,7 +50,11 @@ export function useTimeline() {
 
   async function poll() {
     try {
-      const data = await fetchPosts({ scope: scope.value, after_id: pollAnchorId })
+      const data = await fetchPosts({
+        scope: scope.value,
+        post_type: postType.value,
+        after_id: pollAnchorId,
+      })
       if (data.results.length > 0) {
         // 複数回のtickで見つかった新着はバナーの件数に積み上げる（上書きしない）
         pendingNewPosts = [...data.results, ...pendingNewPosts]
@@ -65,8 +71,12 @@ export function useTimeline() {
     pollTimer = setInterval(poll, POLL_INTERVAL_MS)
   }
 
-  async function load(newScope: TimelineScope = scope.value) {
+  async function load(
+    newScope: TimelineScope = scope.value,
+    newPostType: PostType = postType.value,
+  ) {
     scope.value = newScope
+    postType.value = newPostType
     loading.value = true
     error.value = false
     deleteError.value = null
@@ -74,7 +84,11 @@ export function useTimeline() {
     pendingNewPosts = []
     newPostCount.value = 0
     try {
-      const data = await fetchPosts({ scope: newScope, limit: PAGE_SIZE })
+      const data = await fetchPosts({
+        scope: newScope,
+        post_type: newPostType,
+        limit: PAGE_SIZE,
+      })
       posts.value = data.results
       hasMore.value = data.has_more
       pollAnchorId = data.results[0]?.id ?? 0
@@ -90,17 +104,20 @@ export function useTimeline() {
   async function loadMore() {
     if (!hasMore.value || loadingMore.value || oldestLoadedId === null) return
     loadingMore.value = true
-    // 取得中にタブ（scope）が切り替わっていないかを判定するため、リクエスト時点のscopeを保持する
+    // 取得中にタブ（scope・postType）が切り替わっていないかを判定するため、
+    // リクエスト時点の値を保持する
     const requestScope = scope.value
+    const requestPostType = postType.value
     try {
       const data = await fetchPosts({
         scope: requestScope,
+        post_type: requestPostType,
         before_id: oldestLoadedId,
         limit: PAGE_SIZE,
       })
-      // 応答が返ってくるまでの間にタブが切り替わっていたら、古いscopeの結果は捨てる
+      // 応答が返ってくるまでの間にタブが切り替わっていたら、古いタブの結果は捨てる
       // （捨てないと、切替後の一覧に古いタブの投稿が紛れ込む）
-      if (requestScope !== scope.value) return
+      if (requestScope !== scope.value || requestPostType !== postType.value) return
       posts.value = [...posts.value, ...data.results]
       hasMore.value = data.has_more
       if (data.results.length > 0) {
@@ -124,6 +141,7 @@ export function useTimeline() {
     loadingMore,
     error,
     scope,
+    postType,
     newPostCount,
     reactionError,
     isPending,

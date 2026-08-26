@@ -2,7 +2,7 @@ import { onUnmounted, ref } from 'vue'
 import { apiClient } from '@/lib/apiClient'
 import { extractDetail, extractFieldErrors, extractNonFieldError } from '@/lib/apiError'
 import { validateNewImage } from '@/composables/postImageValidation'
-import type { Post } from '@/types/post'
+import type { Post, PostType } from '@/types/post'
 
 // S04 投稿作成画面を編集モードで開いた場合（画面設計書169行目）。usePostCreateと状態の形は
 // 似ているが、既存画像を「残す」「消す」で扱う分岐（keepImageIds/keepImagePreviews）が
@@ -15,6 +15,9 @@ import type { Post } from '@/types/post'
 // 古い投稿を編集し続けてしまう
 export function usePostEdit() {
   const postId = ref<number | null>(null)
+  // 投稿種別は作成時に固定され編集画面では変更できないため、読み込んだ値をそのまま保持するだけ
+  const postType = ref<PostType>('illustration')
+  const title = ref('')
   const body = ref('')
   // 残す既存画像のid・プレビューURL（常に同じ並び順）
   const keepImageIds = ref<number[]>([])
@@ -22,6 +25,7 @@ export function usePostEdit() {
   // 新規追加分（ファイル自体を保持する必要があるためFile[]）
   const images = ref<File[]>([])
   const imagePreviews = ref<string[]>([])
+  const selectedTagIds = ref<number[]>([])
   const loading = ref(false)
   // 読み込み失敗（投稿が見つからない等）。フォームを空の状態で描画してしまわないよう、
   // submit失敗時のerrorMessageとは別で持つ
@@ -45,9 +49,12 @@ export function usePostEdit() {
     imagePreviews.value = []
     try {
       const { data } = await apiClient.get<Post>(`/api/posts/${id}`)
+      postType.value = data.post_type
+      title.value = data.title
       body.value = data.body
       keepImageIds.value = [...data.image_ids]
       keepImagePreviews.value = [...data.images]
+      selectedTagIds.value = data.tags.map((tag) => tag.id)
     } catch {
       loadError.value = true
     } finally {
@@ -56,7 +63,11 @@ export function usePostEdit() {
   }
 
   function addImage(file: File): string | null {
-    const error = validateNewImage(file, keepImageIds.value.length + images.value.length)
+    const error = validateNewImage(
+      file,
+      keepImageIds.value.length + images.value.length,
+      postType.value,
+    )
     if (error) return error
 
     images.value.push(file)
@@ -84,9 +95,16 @@ export function usePostEdit() {
     submitting.value = true
     try {
       const formData = new FormData()
+      // post_typeは投稿後に変更できない仕様のためPUTでは送らない（PostUpdateSerializerに
+      // そもそもフィールドが存在しない）
+      formData.append('title', title.value)
       formData.append('body', body.value)
       formData.append('keep_image_ids', keepImageIds.value.join(','))
       images.value.forEach((file) => formData.append('images', file))
+      // tag_idsはPOST（作成）と違いCSV文字列で送る。keep_image_idsと同じ理由
+      // （multipart/form-dataでは「選択を全て外した空配列」を明示的に表現する手段が
+      // 空文字のCSVしかなく、フィールド自体を省略すると「変更なし」と区別できないため）
+      formData.append('tag_ids', selectedTagIds.value.join(','))
 
       const { data } = await apiClient.put<Post>(`/api/posts/${postId.value}`, formData)
       return data
@@ -103,11 +121,14 @@ export function usePostEdit() {
   }
 
   return {
+    postType,
+    title,
     body,
     keepImageIds,
     keepImagePreviews,
     images,
     imagePreviews,
+    selectedTagIds,
     loading,
     loadError,
     submitting,

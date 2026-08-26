@@ -515,6 +515,26 @@ code {
   text-align: center;
 }
 
+/* S03 イラストタブの正方形グリッドギャラリー（画面設計書114〜145行目のワイヤーフレームは4列） */
+.post-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+}
+
+.post-grid-tile {
+  display: block;
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+}
+
+.post-grid-tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
 /* 投稿カード（S03/S05/S07で共通利用） */
 .post-card {
   border: 1px solid var(--border);
@@ -569,6 +589,25 @@ code {
 .post-card-author-actions button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.post-card-title {
+  margin: 0 0 8px;
+  color: var(--text-h);
+  font-weight: 500;
+  font-size: 16px;
+}
+
+.post-card-tags {
+  margin: 0 0 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+
+.post-card-tag {
+  color: var(--accent);
+  font-size: 13px;
 }
 
 .post-card-body {
@@ -631,6 +670,46 @@ code {
 
 .post-card-comment-count {
   color: var(--text);
+}
+
+/* S04 投稿作成画面: イラスト/小説の種別切替（画面設計書169行目） */
+.post-type-switch {
+  display: flex;
+  gap: 8px;
+  max-width: 420px;
+  margin: 0 auto 20px;
+}
+
+.post-type-switch button {
+  flex: 1;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.post-type-switch button.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 500;
+}
+
+/* S04 投稿作成画面: 分類タグのチェックボックス（docs/features/tag.md、最大5個） */
+.post-compose-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+
+.post-compose-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-h);
+  font-size: 14px;
 }
 
 /* S04 投稿作成画面 */

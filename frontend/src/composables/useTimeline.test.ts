@@ -14,6 +14,9 @@ function makePost(id: number, overrides: Partial<Post> = {}): Post {
     body: `投稿${id}`,
     images: [],
     image_ids: [],
+    post_type: 'illustration',
+    title: '',
+    tags: [],
     like_count: 0,
     want_count: 0,
     comment_count: 0,
@@ -45,7 +48,7 @@ describe('useTimeline', () => {
     await timeline.load()
 
     expect(apiClient.get).toHaveBeenCalledWith('/api/posts', {
-      params: { scope: 'all', limit: 20 },
+      params: { scope: 'all', post_type: 'illustration', limit: 20 },
     })
     expect(timeline.posts.value.map((p) => p.id)).toEqual([2, 1])
     expect(timeline.hasMore.value).toBe(true)
@@ -65,7 +68,7 @@ describe('useTimeline', () => {
     await timeline.loadMore()
 
     expect(apiClient.get).toHaveBeenLastCalledWith('/api/posts', {
-      params: { scope: 'all', before_id: 1, limit: 20 },
+      params: { scope: 'all', post_type: 'illustration', before_id: 1, limit: 20 },
     })
     expect(timeline.posts.value.map((p) => p.id)).toEqual([2, 1, 0])
     expect(timeline.hasMore.value).toBe(false)
@@ -85,7 +88,7 @@ describe('useTimeline', () => {
     await timeline.load('following')
 
     expect(apiClient.get).toHaveBeenLastCalledWith('/api/posts', {
-      params: { scope: 'following', limit: 20 },
+      params: { scope: 'following', post_type: 'illustration', limit: 20 },
     })
     expect(timeline.newPostCount.value).toBe(0)
     timeline.stopPolling()
@@ -198,7 +201,7 @@ describe('useTimeline', () => {
     // 削除前に読み込んでいた投稿1のidを基準に、その続きが取得できること
     // （posts.valueが空になっていてもbefore_idの基準を見失わない）
     expect(apiClient.get).toHaveBeenLastCalledWith('/api/posts', {
-      params: { scope: 'all', before_id: 1, limit: 20 },
+      params: { scope: 'all', post_type: 'illustration', before_id: 1, limit: 20 },
     })
     expect(timeline.posts.value.map((p) => p.id)).toEqual([0])
     timeline.stopPolling()
@@ -237,6 +240,52 @@ describe('useTimeline', () => {
     expect(timeline.reactionError.value).toBe(
       'いいねの更新に失敗しました。もう一度お試しください。',
     )
+    timeline.stopPolling()
+  })
+
+  it('postType変更: scopeとは独立してload()をやり直す（画面設計書114〜145行目）', async () => {
+    vi.mocked(apiClient.get).mockResolvedValueOnce({
+      data: { results: [makePost(1)], has_more: false },
+    })
+    const timeline = useTimeline()
+    await timeline.load('following')
+
+    vi.mocked(apiClient.get).mockResolvedValueOnce({
+      data: { results: [makePost(9)], has_more: false },
+    })
+    await timeline.load('following', 'novel')
+
+    expect(apiClient.get).toHaveBeenLastCalledWith('/api/posts', {
+      params: { scope: 'following', post_type: 'novel', limit: 20 },
+    })
+    timeline.stopPolling()
+  })
+
+  it('loadMore(): 応答待ちの間に種別タブが切り替わった場合、古い種別の結果は捨てる', async () => {
+    vi.mocked(apiClient.get).mockResolvedValueOnce({
+      data: { results: [makePost(2), makePost(1)], has_more: true },
+    })
+    const timeline = useTimeline()
+    await timeline.load('all', 'illustration')
+
+    let resolveLoadMore: (value: unknown) => void = () => {}
+    vi.mocked(apiClient.get).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveLoadMore = resolve
+        }),
+    )
+    const loadMorePromise = timeline.loadMore()
+
+    vi.mocked(apiClient.get).mockResolvedValueOnce({
+      data: { results: [makePost(9)], has_more: false },
+    })
+    await timeline.load('all', 'novel')
+
+    resolveLoadMore({ data: { results: [makePost(0)], has_more: false } })
+    await loadMorePromise
+
+    expect(timeline.posts.value.map((p) => p.id)).toEqual([9])
     timeline.stopPolling()
   })
 

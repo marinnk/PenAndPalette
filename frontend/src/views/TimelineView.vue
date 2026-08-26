@@ -3,8 +3,10 @@ import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import AppHeader from '@/components/AppHeader.vue'
 import TimelineTabs from '@/components/TimelineTabs.vue'
+import PostTypeTabs from '@/components/PostTypeTabs.vue'
 import NewPostBanner from '@/components/NewPostBanner.vue'
 import PostCard from '@/components/PostCard.vue'
+import PostGrid from '@/components/PostGrid.vue'
 import { useTimeline } from '@/composables/useTimeline'
 
 // S03 タイムライン画面（画面設計書114〜145行目）。このコンポーネントはuseTimelineから
@@ -15,6 +17,7 @@ const {
   loading,
   error,
   scope,
+  postType,
   newPostCount,
   reactionError,
   isPending,
@@ -33,9 +36,10 @@ const sentinel = ref<HTMLElement | null>(null)
 let observer: IntersectionObserver | null = null
 
 function emptyMessage() {
+  const typeLabel = postType.value === 'novel' ? '小説の' : 'イラストの'
   return scope.value === 'following'
-    ? 'フォロー中の利用者の投稿がまだありません。'
-    : '投稿がまだありません。'
+    ? `フォロー中の利用者の${typeLabel}投稿がまだありません。`
+    : `${typeLabel}投稿がまだありません。`
 }
 
 function handleReveal() {
@@ -59,7 +63,11 @@ onUnmounted(() => {
 })
 
 watch(scope, (newScope) => {
-  load(newScope)
+  load(newScope, postType.value)
+})
+
+watch(postType, (newPostType) => {
+  load(scope.value, newPostType)
 })
 </script>
 
@@ -83,6 +91,7 @@ watch(scope, (newScope) => {
       </p>
       <NewPostBanner :count="newPostCount" @reveal="handleReveal" />
       <TimelineTabs v-model="scope" />
+      <PostTypeTabs v-model="postType" />
 
       <p v-if="loading" data-testid="timeline-loading">読み込み中...</p>
       <p v-else-if="error" class="field-error" data-testid="timeline-error">
@@ -91,6 +100,7 @@ watch(scope, (newScope) => {
       <p v-else-if="posts.length === 0" class="empty-state" data-testid="timeline-empty">
         {{ emptyMessage() }}
       </p>
+      <PostGrid v-else-if="postType === 'illustration'" :posts="posts" />
       <template v-else>
         <PostCard
           v-for="post in posts"

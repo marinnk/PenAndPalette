@@ -55,6 +55,7 @@ describe('PostCreateView', () => {
     await router.isReady()
 
     await fireEvent.update(screen.getByTestId('post-body'), 'テスト')
+    await selectImage(makeFile())
     await fireEvent.click(screen.getByTestId('post-compose-submit'))
 
     await waitFor(() => {
@@ -63,18 +64,47 @@ describe('PostCreateView', () => {
     })
   })
 
-  it('本文が空のときは投稿ボタンがdisabledになる', () => {
+  it('画像が無いときは投稿ボタンがdisabledになる（イラスト投稿は画像必須）', () => {
     renderPostCreateView()
 
     expect(screen.getByTestId('post-compose-submit')).toBeDisabled()
   })
 
-  it('本文が空白のみのときも投稿ボタンがdisabledになる（バックエンドのtrim検証と一致させる）', async () => {
+  it('本文を入力しても画像が無ければ投稿ボタンはdisabledのまま', async () => {
     renderPostCreateView()
 
-    await fireEvent.update(screen.getByTestId('post-body'), '   ')
+    await fireEvent.update(screen.getByTestId('post-body'), 'テスト')
 
     expect(screen.getByTestId('post-compose-submit')).toBeDisabled()
+  })
+
+  it('小説を選ぶとタイトル欄が現れ、タイトル・本文の両方を入力するまで投稿ボタンはdisabledのまま', async () => {
+    renderPostCreateView()
+
+    await fireEvent.click(screen.getByTestId('post-type-novel'))
+    expect(screen.getByTestId('post-compose-submit')).toBeDisabled()
+
+    await fireEvent.update(screen.getByTestId('post-title'), 'タイトル')
+    expect(screen.getByTestId('post-compose-submit')).toBeDisabled()
+
+    await fireEvent.update(screen.getByTestId('post-body'), '本文')
+    expect(screen.getByTestId('post-compose-submit')).not.toBeDisabled()
+  })
+
+  it('post_type・titleを含めて送信する', async () => {
+    vi.mocked(apiClient.post).mockResolvedValueOnce({ data: { id: 1 } })
+    renderPostCreateView()
+
+    await fireEvent.click(screen.getByTestId('post-type-novel'))
+    await fireEvent.update(screen.getByTestId('post-title'), 'タイトル')
+    await fireEvent.update(screen.getByTestId('post-body'), '本文')
+    await fireEvent.click(screen.getByTestId('post-compose-submit'))
+
+    await waitFor(() => {
+      const formData = vi.mocked(apiClient.post).mock.calls[0][1] as FormData
+      expect(formData.get('post_type')).toBe('novel')
+      expect(formData.get('title')).toBe('タイトル')
+    })
   })
 
   it('キャンセルでタイムラインへ戻る', async () => {

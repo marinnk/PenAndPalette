@@ -24,13 +24,18 @@ const PostDetailStub = { template: '<div>post-detail</div>' }
 const ProfileStub = { template: '<div>profile</div>' }
 const SearchStub = { template: '<div>search</div>' }
 
+// イラストタブ（既定表示）ではPostGridが画像のみを表示するため、デフォルトで1枚画像を
+// 持たせておく（小説タブのテストではPostCard側で本文・削除ボタン等を検証する）
 function makePost(id: number, overrides: Partial<Post> = {}): Post {
   return {
     id,
     author: { id: 1, username: 'author', display_name: '投稿者', avatar_url: null },
     body: `投稿${id}`,
-    images: [],
-    image_ids: [],
+    images: ['https://example.com/1.jpg'],
+    image_ids: [1],
+    post_type: 'illustration',
+    title: '',
+    tags: [],
     like_count: 0,
     want_count: 0,
     comment_count: 0,
@@ -79,6 +84,15 @@ function renderTimelineView() {
   return { ...result, router }
 }
 
+// 小説タブ（PostCardのリスト表示）に切り替える。delete-button等、グリッド表示には
+// 無い要素を検証するテストで使う
+async function switchToNovelTab() {
+  await fireEvent.click(screen.getByTestId('tab-novel'))
+  await waitFor(() =>
+    expect(apiClient.get).toHaveBeenLastCalledWith('/api/posts', expect.anything()),
+  )
+}
+
 beforeEach(() => {
   vi.mocked(apiClient.get).mockReset()
   vi.mocked(apiClient.post).mockReset()
@@ -91,46 +105,77 @@ afterEach(() => {
 })
 
 describe('TimelineView', () => {
-  it('マウント時にGET /api/posts?scope=allで一覧取得する', async () => {
+  it('マウント時にGET /api/posts?scope=all&post_type=illustrationで一覧取得し、イラストタブはグリッド表示になる', async () => {
     mockGet([{ results: [makePost(1)], has_more: false }])
     const { router } = renderTimelineView()
     await router.isReady()
 
     await waitFor(() => {
       expect(apiClient.get).toHaveBeenCalledWith('/api/posts', {
-        params: { scope: 'all', limit: 20 },
+        params: { scope: 'all', post_type: 'illustration', limit: 20 },
       })
-      expect(screen.getByText('投稿1')).toBeInTheDocument()
+      expect(screen.getByTestId('post-grid-tile-1')).toBeInTheDocument()
     })
   })
 
-  it('投稿が無い場合は空状態メッセージを表示する', async () => {
-    mockGet([{ results: [], has_more: false }])
+  it('投稿が無い場合は種別に応じた空状態メッセージを表示する', async () => {
+    mockGet([
+      { results: [], has_more: false },
+      { results: [], has_more: false },
+    ])
     const { router } = renderTimelineView()
     await router.isReady()
 
     await waitFor(() => {
-      expect(screen.getByTestId('timeline-empty')).toHaveTextContent('投稿がまだありません。')
+      expect(screen.getByTestId('timeline-empty')).toHaveTextContent(
+        'イラストの投稿がまだありません。',
+      )
+    })
+
+    await fireEvent.click(screen.getByTestId('tab-novel'))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('timeline-empty')).toHaveTextContent('小説の投稿がまだありません。')
     })
   })
 
-  it('フォロー中タブに切り替えるとscope=followingで再取得する', async () => {
+  it('小説タブに切り替えるとpost_type=novelで再取得し、リスト表示になる（全体／フォロー中とは独立）', async () => {
+    mockGet([
+      { results: [makePost(1)], has_more: false },
+      { results: [makePost(2, { post_type: 'novel', title: '小説タイトル' })], has_more: false },
+    ])
+    const { router } = renderTimelineView()
+    await router.isReady()
+    await waitFor(() => expect(screen.getByTestId('post-grid-tile-1')).toBeInTheDocument())
+
+    await fireEvent.click(screen.getByTestId('tab-novel'))
+
+    await waitFor(() => {
+      expect(apiClient.get).toHaveBeenLastCalledWith('/api/posts', {
+        params: { scope: 'all', post_type: 'novel', limit: 20 },
+      })
+      expect(screen.getByText('【小説タイトル】')).toBeInTheDocument()
+      expect(screen.queryByTestId('post-grid-tile-1')).not.toBeInTheDocument()
+    })
+  })
+
+  it('フォロー中タブに切り替えるとscope=followingで再取得する（種別タブとは独立）', async () => {
     mockGet([
       { results: [makePost(1)], has_more: false },
       { results: [], has_more: false },
     ])
     const { router } = renderTimelineView()
     await router.isReady()
-    await waitFor(() => expect(screen.getByText('投稿1')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByTestId('post-grid-tile-1')).toBeInTheDocument())
 
     await fireEvent.click(screen.getByTestId('tab-following'))
 
     await waitFor(() => {
       expect(apiClient.get).toHaveBeenLastCalledWith('/api/posts', {
-        params: { scope: 'following', limit: 20 },
+        params: { scope: 'following', post_type: 'illustration', limit: 20 },
       })
       expect(screen.getByTestId('timeline-empty')).toHaveTextContent(
-        'フォロー中の利用者の投稿がまだありません。',
+        'フォロー中の利用者のイラストの投稿がまだありません。',
       )
     })
   })
@@ -146,7 +191,7 @@ describe('TimelineView', () => {
     ])
     const { router } = renderTimelineView()
     await router.isReady()
-    await waitFor(() => expect(screen.getByText('投稿1')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByTestId('post-grid-tile-1')).toBeInTheDocument())
 
     await vi.advanceTimersByTimeAsync(30_000)
     await waitFor(() => expect(screen.getByTestId('new-post-banner')).toBeInTheDocument())
@@ -154,7 +199,7 @@ describe('TimelineView', () => {
     await fireEvent.click(screen.getByTestId('new-post-banner'))
 
     await waitFor(() => {
-      expect(screen.getByText('投稿2')).toBeInTheDocument()
+      expect(screen.getByTestId('post-grid-tile-2')).toBeInTheDocument()
       expect(screen.queryByTestId('new-post-banner')).not.toBeInTheDocument()
       expect(scrollToSpy).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' })
     })
@@ -162,10 +207,18 @@ describe('TimelineView', () => {
     vi.useRealTimers()
   })
 
-  it('自分の投稿の削除ボタン→確認後に一覧からその場で取り除かれる', async () => {
-    mockGet([{ results: [makePost(1), makePost(2)], has_more: false }])
+  it('自分の投稿の削除ボタン→確認後に一覧からその場で取り除かれる（小説タブのリスト表示で確認）', async () => {
+    mockGet([
+      { results: [makePost(1)], has_more: false },
+      {
+        results: [makePost(1, { post_type: 'novel' }), makePost(2, { post_type: 'novel' })],
+        has_more: false,
+      },
+    ])
     const { router } = renderTimelineView()
     await router.isReady()
+    await waitFor(() => expect(screen.getByTestId('post-grid-tile-1')).toBeInTheDocument())
+    await switchToNovelTab()
     await waitFor(() => expect(screen.getByText('投稿1')).toBeInTheDocument())
 
     vi.mocked(apiClient.delete).mockResolvedValueOnce({})
@@ -178,10 +231,15 @@ describe('TimelineView', () => {
     })
   })
 
-  it('削除に失敗した場合はエラーメッセージを表示し一覧はそのまま', async () => {
-    mockGet([{ results: [makePost(1)], has_more: false }])
+  it('削除に失敗した場合はエラーメッセージを表示し一覧はそのまま（小説タブのリスト表示で確認）', async () => {
+    mockGet([
+      { results: [makePost(1)], has_more: false },
+      { results: [makePost(1, { post_type: 'novel' })], has_more: false },
+    ])
     const { router } = renderTimelineView()
     await router.isReady()
+    await waitFor(() => expect(screen.getByTestId('post-grid-tile-1')).toBeInTheDocument())
+    await switchToNovelTab()
     await waitFor(() => expect(screen.getByText('投稿1')).toBeInTheDocument())
 
     vi.mocked(apiClient.delete).mockRejectedValueOnce(new Error('network error'))

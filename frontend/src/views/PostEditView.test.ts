@@ -21,6 +21,9 @@ const existingPost = {
   body: '編集前の本文',
   images: ['https://example.com/1.jpg'],
   image_ids: [10],
+  post_type: 'illustration',
+  title: '',
+  tags: [],
   like_count: 0,
   want_count: 0,
   comment_count: 0,
@@ -28,6 +31,17 @@ const existingPost = {
   wanted_by_me: false,
   created_at: '2026-08-23T00:00:00Z',
   updated_at: '2026-08-23T00:00:00Z',
+}
+
+// PostEditView.vueはマウント時にGET /api/posts/{id}（投稿本体）とGET /api/tags（タグ選択欄用）の
+// 2つを呼ぶため、単純な呼び出し順ベースのmockResolvedValueOnceだと後者が前者の応答を
+// 消費してしまう。URLで振り分け、/api/tagsは常に空配列を返す
+function mockGet(handlePostUrl: (url: string) => Promise<unknown>) {
+  vi.mocked(apiClient.get).mockImplementation((url: string) => {
+    // タグ選択欄のテストで使うid=1のタグだけ最小限用意しておく
+    if (url === '/api/tags') return Promise.resolve({ data: [{ id: 1, name: 'オリジナル' }] })
+    return handlePostUrl(url)
+  })
 }
 
 // from: 編集画面を開く前にいた画面。router.back()で実際にそこへ戻ることを検証するため、
@@ -54,7 +68,7 @@ beforeEach(() => {
 
 describe('PostEditView', () => {
   it('マウント時に既存の投稿を読み込み、本文・画像が入力済みの状態で表示する', async () => {
-    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: existingPost })
+    mockGet(() => Promise.resolve({ data: existingPost }))
     await renderPostEditView()
 
     await waitFor(() => {
@@ -65,7 +79,7 @@ describe('PostEditView', () => {
   })
 
   it('見出し・送信ボタンが編集モードの文言になる（画面設計書169行目）', async () => {
-    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: existingPost })
+    mockGet(() => Promise.resolve({ data: existingPost }))
     await renderPostEditView()
 
     await waitFor(() => {
@@ -75,7 +89,7 @@ describe('PostEditView', () => {
   })
 
   it('保存成功時に遷移元の画面へ戻る（タイムラインから開いた場合）', async () => {
-    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: existingPost })
+    mockGet(() => Promise.resolve({ data: existingPost }))
     const { router } = await renderPostEditView('1', 'timeline')
     await waitFor(() => screen.getByTestId('post-compose-submit'))
 
@@ -90,7 +104,7 @@ describe('PostEditView', () => {
   })
 
   it('保存成功時に遷移元の画面へ戻る（投稿詳細から開いた場合）', async () => {
-    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: existingPost })
+    mockGet(() => Promise.resolve({ data: existingPost }))
     const { router } = await renderPostEditView('1', 'post-detail')
     await waitFor(() => screen.getByTestId('post-compose-submit'))
 
@@ -104,7 +118,7 @@ describe('PostEditView', () => {
   })
 
   it('キャンセルで遷移元の画面へ戻る', async () => {
-    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: existingPost })
+    mockGet(() => Promise.resolve({ data: existingPost }))
     const { router } = await renderPostEditView('1', 'timeline')
     await waitFor(() => screen.getByTestId('post-compose-cancel'))
 
@@ -119,7 +133,7 @@ describe('PostEditView', () => {
     // Vue Routerは同じルートレコード内の遷移（/posts/:id/edit → /posts/:otherId/edit）で
     // コンポーネントインスタンスを使い回すため、実際の挙動に合わせてidのprops変更を
     // rerenderで再現する（PostDetailView.test.tsと同じパターン）
-    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: existingPost })
+    mockGet(() => Promise.resolve({ data: existingPost }))
     const { rerender } = await renderPostEditView()
     await waitFor(() => expect(screen.getByTestId('post-body')).toHaveValue('編集前の本文'))
 
@@ -135,7 +149,7 @@ describe('PostEditView', () => {
   })
 
   it('存在しない投稿を開くと、空フォームではなくエラーメッセージを表示する', async () => {
-    vi.mocked(apiClient.get).mockRejectedValueOnce(new Error('not found'))
+    mockGet(() => Promise.reject(new Error('not found')))
     await renderPostEditView()
 
     await waitFor(() => {
@@ -144,18 +158,59 @@ describe('PostEditView', () => {
     expect(screen.queryByTestId('post-body')).not.toBeInTheDocument()
   })
 
-  it('既存画像の削除ボタンでkeep_image_idsから除外される', async () => {
-    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: existingPost })
+  it('既存画像の削除ボタンでkeep_image_idsから除外される（イラストは画像必須のため新規画像を1枚追加してから保存する）', async () => {
+    mockGet(() => Promise.resolve({ data: existingPost }))
     await renderPostEditView()
     await waitFor(() => screen.getByTestId('post-image-remove-0'))
 
     await fireEvent.click(screen.getByTestId('post-image-remove-0'))
+    const newImage = new File([new Uint8Array(1024)], 'new.jpg', { type: 'image/jpeg' })
+    await fireEvent.change(screen.getByTestId('post-image-input'), {
+      target: { files: [newImage] },
+    })
     vi.mocked(apiClient.put).mockResolvedValueOnce({ data: existingPost })
     await fireEvent.click(screen.getByTestId('post-compose-submit'))
 
     await waitFor(() => {
       const formData = vi.mocked(apiClient.put).mock.calls[0][1] as FormData
       expect(formData.get('keep_image_ids')).toBe('')
+    })
+  })
+
+  it('小説投稿を編集する場合、タイトル・タグが読み込んだ内容でプリフィルされ、種別切替は表示されない', async () => {
+    mockGet(() =>
+      Promise.resolve({
+        data: {
+          ...existingPost,
+          post_type: 'novel',
+          title: '編集前のタイトル',
+          tags: [{ id: 1, name: 'オリジナル' }],
+        },
+      }),
+    )
+    await renderPostEditView()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('post-title')).toHaveValue('編集前のタイトル')
+      expect(screen.getByTestId('post-tag-1')).toBeChecked()
+      expect(screen.queryByTestId('post-type-illustration')).not.toBeInTheDocument()
+      expect(screen.queryByTestId('post-type-novel')).not.toBeInTheDocument()
+    })
+  })
+
+  it('タグを選択して保存すると、tag_idsがカンマ区切りの文字列で送信される', async () => {
+    mockGet(() =>
+      Promise.resolve({ data: { ...existingPost, tags: [{ id: 1, name: 'オリジナル' }] } }),
+    )
+    await renderPostEditView()
+    await waitFor(() => screen.getByTestId('post-tag-1'))
+
+    vi.mocked(apiClient.put).mockResolvedValueOnce({ data: existingPost })
+    await fireEvent.click(screen.getByTestId('post-compose-submit'))
+
+    await waitFor(() => {
+      const formData = vi.mocked(apiClient.put).mock.calls[0][1] as FormData
+      expect(formData.get('tag_ids')).toBe('1')
     })
   })
 })
