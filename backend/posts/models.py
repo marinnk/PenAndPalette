@@ -1,6 +1,6 @@
 from django.conf import settings
 from django.db import models
-from django.db.models import Count, Exists, OuterRef, Q
+from django.db.models import Count, Exists, OuterRef, Prefetch, Q
 
 
 class PostQuerySet(models.QuerySet):
@@ -13,7 +13,9 @@ class PostQuerySet(models.QuerySet):
         """
         return (
             self.select_related("user")
-            .prefetch_related("images")
+            .prefetch_related(
+                "images", Prefetch("tags", queryset=Tag.objects.order_by("display_order"))
+            )
             .annotate(
                 like_count=Count("likes", distinct=True),
                 want_count=Count("wants", distinct=True),
@@ -26,7 +28,15 @@ class PostQuerySet(models.QuerySet):
 
 class PostManager(models.Manager.from_queryset(PostQuerySet)):
     def list_for_timeline(
-        self, viewer, *, scope=None, user_id=None, before_id=None, after_id=None, limit=20
+        self,
+        viewer,
+        *,
+        scope=None,
+        user_id=None,
+        post_type=None,
+        before_id=None,
+        after_id=None,
+        limit=20,
     ):
         """基本設計書6.3・6.9章のカーソルページネーションで投稿一覧を取得する。
 
@@ -41,6 +51,10 @@ class PostManager(models.Manager.from_queryset(PostQuerySet)):
             qs = qs.filter(
                 Q(user_id__in=Follow.objects.followee_ids(viewer)) | Q(user_id=viewer.id)
             )
+        # post_typeはscope・user_idとは独立した軸のため、上のif/elifとは別に絞り込む
+        # （基本設計書6.3章：「全体／フォロー中」×「イラスト／小説」は自由に組み合わせられる）
+        if post_type:
+            qs = qs.filter(post_type=post_type)
         if before_id:
             qs = qs.filter(id__lt=before_id)
         if after_id is not None:
@@ -54,14 +68,22 @@ class PostManager(models.Manager.from_queryset(PostQuerySet)):
 class Post(models.Model):
     """基本設計書 4.2章 postsテーブルに対応するモデル。
 
-    「本文・画像の少なくとも一方が必要」というルールはDB制約ではなくPostCreateSerializer側の
-    バリデーションで実現するため、bodyは画像のみの投稿ではNULLになりうる（NULL可）。
+    「本文・画像の少なくとも一方が必要」に相当するルール（イラスト投稿は画像1〜4枚必須、
+    小説投稿はタイトル・本文必須、というように投稿種別ごとに異なる）はDB制約ではなく
+    PostCreateSerializer側のバリデーションで実現するため、body・titleはNULL可のままにする。
     """
+
+    class PostType(models.TextChoices):
+        ILLUSTRATION = "illustration", "イラスト"
+        NOVEL = "novel", "小説"
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="posts"
     )
-    body = models.CharField(max_length=280, null=True, blank=True)
+    post_type = models.CharField(max_length=20, choices=PostType.choices)
+    title = models.CharField(max_length=100, null=True, blank=True)
+    body = models.CharField(max_length=4000, null=True, blank=True)
+    tags = models.ManyToManyField("posts.Tag", through="PostTag", related_name="posts")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -70,6 +92,13 @@ class Post(models.Model):
     class Meta:
         db_table = "posts"
         ordering = ["-id"]
+        constraints = [
+            # ネストしたクラス（Meta）からはPostType（Postの別のネストクラス）を名前解決
+            # できないため、PostType.valuesと同じ2値をここでは直接列挙する
+            models.CheckConstraint(
+                condition=Q(post_type__in=["illustration", "novel"]), name="post_type_valid"
+            ),
+        ]
 
     def __str__(self):
         return f"Post({self.id}, user={self.user_id})"
@@ -91,6 +120,40 @@ class PostImage(models.Model):
 
     def __str__(self):
         return f"PostImage({self.id}, post={self.post_id})"
+
+
+class Tag(models.Model):
+    """基本設計書 4.2章 tagsテーブルに対応するモデル。利用者が追加・編集・削除できない固定の
+    分類タグ一覧（12件）で、初期データはマイグレーションのシードデータとして投入する
+    （posts/migrations/0006_seed_tags.py参照）。
+    """
+
+    name = models.CharField(max_length=50, unique=True)
+    display_order = models.IntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "tags"
+        ordering = ["display_order"]
+
+    def __str__(self):
+        return self.name
+
+
+class PostTag(models.Model):
+    """基本設計書 4.2章 post_tagsテーブルに対応するモデル。複合主キー(post_id, tag_id)。
+
+    tag側をON DELETE RESTRICTにするのは、tagsが利用者操作では変化しないアプリ管理の固定
+    データであり、誤って行を削除した場合に投稿側のタグ付けが黙って失われるより、削除自体を
+    エラーにして気づけるほうが安全なため。
+    """
+
+    pk = models.CompositePrimaryKey("post_id", "tag_id")
+    post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name="post_tags")
+    tag = models.ForeignKey(Tag, on_delete=models.RESTRICT, related_name="post_tags")
+
+    class Meta:
+        db_table = "post_tags"
 
 
 class ReactionManager(models.Manager):

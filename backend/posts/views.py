@@ -6,7 +6,7 @@ from rest_framework.views import APIView
 
 from common.permissions import IsOwner, get_owned_object_or_404
 from common.storage import delete_images_best_effort
-from posts.models import Comment, Like, Post, Want
+from posts.models import Comment, Like, Post, Tag, Want
 from posts.serializers import (
     CommentCreateSerializer,
     CommentSerializer,
@@ -16,6 +16,7 @@ from posts.serializers import (
     PostListQuerySerializer,
     PostSerializer,
     PostUpdateSerializer,
+    TagSerializer,
     WantReactionSerializer,
 )
 
@@ -172,3 +173,14 @@ class CommentDetailView(APIView):
         comment.delete()
         delete_images_best_effort([image_url])
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class TagListView(APIView):
+    """GET /api/tags 分類タグの一覧をdisplay_order順で取得する（基本設計書6.11章）。
+
+    固定の12件で学習規模のデータ量のため、ReceivedRequestListViewと同様ページネーションは
+    設けない。レスポンスは/api/postsのような{"results": [...]}ではなく素の配列。
+    """
+
+    def get(self, request):
+        return Response(TagSerializer(Tag.objects.all(), many=True).data)

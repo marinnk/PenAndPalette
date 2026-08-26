@@ -7,6 +7,7 @@ from posts.views import (
     PostLikeView,
     PostListCreateView,
     PostWantView,
+    TagListView,
 )
 
 urlpatterns = [
@@ -20,4 +21,5 @@ urlpatterns = [
         name="post-comments",
     ),
     path("comments/<int:comment_id>", CommentDetailView.as_view(), name="comment-detail"),
+    path("tags", TagListView.as_view(), name="tag-list"),
 ]
