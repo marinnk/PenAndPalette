@@ -5,9 +5,10 @@ from django.db.models import Count, Exists, OuterRef, Q
 
 class PostQuerySet(models.QuerySet):
     def with_reactions(self, viewer):
-        """一覧・詳細・作成直後の再取得すべてで使う、いいね/かきたいの集計付きクエリセット。
+        """一覧・詳細・作成直後の再取得すべてで使う、いいね/かきたい/コメント数の集計付き
+        クエリセット。
 
-        同一クエリでlikes・wantsの2つの逆参照をCountすると、JOINが直積になり件数が
+        同一クエリでlikes・wants・commentsの3つの逆参照をCountすると、JOINが直積になり件数が
         水増しされるため、distinct=Trueが必須（基本設計書6.3章のN+1回避方針と対になる注意点）。
         """
         return (
@@ -16,6 +17,7 @@ class PostQuerySet(models.QuerySet):
             .annotate(
                 like_count=Count("likes", distinct=True),
                 want_count=Count("wants", distinct=True),
+                comment_count=Count("comments", distinct=True),
                 liked_by_me=Exists(Like.objects.filter(post=OuterRef("pk"), user=viewer)),
                 wanted_by_me=Exists(Want.objects.filter(post=OuterRef("pk"), user=viewer)),
             )
@@ -133,3 +135,34 @@ class Want(PostReaction):
     class Meta:
         db_table = "wants"
         constraints = [models.UniqueConstraint(fields=["post", "user"], name="uniq_want")]
+
+
+class CommentManager(models.Manager):
+    def list_for_post(self, post_id):
+        """指定した投稿のコメントを古い順（id昇順）・コメント者情報込みで1回のJOINクエリ
+        で取得する（基本設計書6.4章）。
+        """
+        return self.filter(post_id=post_id).select_related("user")
+
+
+class Comment(models.Model):
+    """基本設計書 4.2章 commentsテーブルに対応するモデル。「本文・画像の少なくとも一方が
+    必要」というルールはPostと同様、DB制約ではなくシリアライザ側のバリデーションで実現する
+    ため、content・image_urlはどちらもNULL可。
+    """
+
+    post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name="comments")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    content = models.CharField(max_length=280, null=True, blank=True)
+    image_url = models.CharField(max_length=500, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    objects = CommentManager()
+
+    class Meta:
+        db_table = "comments"
+        ordering = ["id"]  # 古い順（Postの["-id"]とは逆）
+
+    def __str__(self):
+        return f"Comment({self.id}, post={self.post_id})"

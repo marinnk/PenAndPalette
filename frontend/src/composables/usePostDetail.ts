@@ -4,7 +4,7 @@ import { setLiked, setWanted } from '@/composables/usePostReactions'
 import { deletePostById } from '@/composables/usePostDelete'
 import type { Post } from '@/types/post'
 
-// S05 投稿詳細画面（今回はコメント一覧・投稿UIを含まないスタブ）
+// S05 投稿詳細画面
 export function usePostDetail() {
   const post = ref<Post | null>(null)
   const loading = ref(false)
@@ -73,6 +73,14 @@ export function usePostDetail() {
     }
   }
 
+  // コメントの投稿・削除後、postを直接いじるのはPostDetailView側ではなくここに集約する
+  // （postを保持・変更する責務はこのcomposableに閉じ込め、いいね/かきたいと同じ扱いにする）。
+  // コメント一覧（useComments）のcomments.length自体が既に正しい件数なので、増減を
+  // 個別に計算せず、呼び出し側から渡された最新件数をそのまま反映するだけにする
+  function syncCommentCount(count: number) {
+    if (post.value) post.value.comment_count = count
+  }
+
   return {
     post,
     loading,
@@ -85,5 +93,6 @@ export function usePostDetail() {
     toggleLike,
     toggleWant,
     deletePost,
+    syncCommentCount,
   }
 }

@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from posts.models import Like, Post, PostImage, Want
+from posts.models import Comment, Like, Post, PostImage, Want
 
 
 @admin.register(Post)
@@ -24,3 +24,9 @@ class LikeAdmin(admin.ModelAdmin):
 @admin.register(Want)
 class WantAdmin(admin.ModelAdmin):
     list_display = ["id", "post", "user", "created_at"]
+
+
+@admin.register(Comment)
+class CommentAdmin(admin.ModelAdmin):
+    list_display = ["id", "post", "user", "content", "created_at"]
+    search_fields = ["content"]

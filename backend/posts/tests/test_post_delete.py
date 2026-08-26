@@ -3,8 +3,8 @@ from unittest.mock import patch
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from posts.models import Like, Post, Want
-from posts.tests.conftest import create_post, create_post_image
+from posts.models import Comment, Like, Post, Want
+from posts.tests.conftest import create_comment, create_post, create_post_image
 from users.tests.conftest import DEFAULT_PASSWORD, create_user
 
 
@@ -58,6 +58,22 @@ class PostDeleteTests(APITestCase):
 
         self.assertEqual(Like.objects.filter(post_id=self.post.id).count(), 0)
         self.assertEqual(Want.objects.filter(post_id=self.post.id).count(), 0)
+
+    def test_delete_cascades_comments_and_removes_their_images(self):
+        create_comment(
+            self.post,
+            self.other,
+            content="画像付きコメント",
+            image_url="https://example.com/c1.jpg",
+        )
+        create_comment(self.post, self.other, content="画像なしコメント")
+        self._login()
+
+        with patch("common.storage.delete_image") as mock_delete:
+            self.client.delete(self._url())
+
+        self.assertEqual(Comment.objects.filter(post_id=self.post.id).count(), 0)
+        mock_delete.assert_called_once_with("https://example.com/c1.jpg")
 
     def test_delete_removes_images_from_storage(self):
         create_post_image(self.post, image_url="https://example.com/1.jpg", display_order=0)

@@ -12,10 +12,13 @@ class IsOwner(BasePermission):
     get_object()が存在せず、has_object_permissionは自動実行されない。単体では
     check_object_permissions()の呼び出し忘れを防げないため、ビュー側では直接使わず
     下のget_owned_object_or_404()経由で使うこと。対象モデルはuser（FK）を持つことを
-    前提とする（Post・将来のCommentなど）。
+    前提とする（Post・Commentで共用）。
+
+    messageはPost・Commentのどちらでも通用するよう対象物を特定しない文言にする
+    （「投稿」固定だと、CommentDetailViewでの403時に「投稿」という誤った言葉が返ってしまうため）。
     """
 
-    message = "自分以外の投稿を編集・削除することはできません。"
+    message = "自分以外の投稿・コメントを編集・削除することはできません。"
 
     def has_object_permission(self, request, view, obj):
         return obj.user_id == request.user.id
