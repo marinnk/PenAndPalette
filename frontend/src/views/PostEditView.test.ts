@@ -192,7 +192,7 @@ describe('PostEditView', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('post-title')).toHaveValue('編集前のタイトル')
-      expect(screen.getByTestId('post-tag-1')).toBeChecked()
+      expect(screen.getByTestId('post-tag-1')).toHaveClass('active')
       expect(screen.queryByTestId('post-type-illustration')).not.toBeInTheDocument()
       expect(screen.queryByTestId('post-type-novel')).not.toBeInTheDocument()
     })

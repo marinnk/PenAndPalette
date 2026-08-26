@@ -6,7 +6,6 @@ import TimelineTabs from '@/components/TimelineTabs.vue'
 import PostTypeTabs from '@/components/PostTypeTabs.vue'
 import NewPostBanner from '@/components/NewPostBanner.vue'
 import PostCard from '@/components/PostCard.vue'
-import PostGrid from '@/components/PostGrid.vue'
 import { useTimeline } from '@/composables/useTimeline'
 
 // S03 タイムライン画面（画面設計書114〜145行目）。このコンポーネントはuseTimelineから
@@ -74,7 +73,7 @@ watch(postType, (newPostType) => {
 <template>
   <div>
     <AppHeader />
-    <main class="timeline">
+    <main class="timeline" :class="{ 'timeline-grid': postType === 'illustration' }">
       <button
         type="button"
         class="form-submit timeline-compose-button"
@@ -100,8 +99,13 @@ watch(postType, (newPostType) => {
       <p v-else-if="posts.length === 0" class="empty-state" data-testid="timeline-empty">
         {{ emptyMessage() }}
       </p>
-      <PostGrid v-else-if="postType === 'illustration'" :posts="posts" />
-      <template v-else>
+      <!-- イラストタブは2〜4列のグリッド、小説タブは単一列のリストで並べる。カードの内容
+      （本文・タグ・画像等）自体はどちらのタブでも同じPostCardを使う（画面設計書114〜167行目） -->
+      <div
+        v-else
+        :class="{ 'post-card-grid': postType === 'illustration' }"
+        :data-testid="postType === 'illustration' ? 'illustration-grid' : undefined"
+      >
         <PostCard
           v-for="post in posts"
           :key="post.id"
@@ -111,7 +115,7 @@ watch(postType, (newPostType) => {
           @toggle-want="toggleWant"
           @delete="deletePost"
         />
-      </template>
+      </div>
 
       <div ref="sentinel" data-testid="timeline-sentinel"></div>
     </main>
