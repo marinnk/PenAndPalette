@@ -13,16 +13,24 @@ URL.createObjectURL = vi.fn(() => 'blob:mock-url')
 URL.revokeObjectURL = vi.fn()
 
 const TimelineStub = { template: '<div>timeline</div>' }
+const ProfileStub = { template: '<div>profile</div>' }
 
-function renderPostCreateView() {
+// from: 投稿作成画面を開く前にいた画面。router.back()で実際にそこへ戻ることを検証するため、
+// 先にその画面へ遷移してから投稿作成画面へ遷移する（本物のナビゲーション履歴を作る。
+// PostEditView.test.tsのrenderPostEditViewと同じパターン）
+async function renderPostCreateView(from: 'timeline' | 'profile' = 'timeline') {
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
       { path: '/', name: 'timeline', component: TimelineStub },
+      { path: '/profile/:id', name: 'profile', component: ProfileStub },
       { path: '/posts/new', name: 'post-create', component: PostCreateView },
     ],
   })
-  router.push({ name: 'post-create' })
+  await router.push(
+    from === 'profile' ? { name: 'profile', params: { id: '1' } } : { name: 'timeline' },
+  )
+  await router.push({ name: 'post-create' })
   const result = render(PostCreateView, { global: { plugins: [router] } })
   return { ...result, router }
 }
@@ -42,16 +50,16 @@ beforeEach(() => {
 
 describe('PostCreateView', () => {
   it('文字数カウンターが入力に応じて更新される', async () => {
-    renderPostCreateView()
+    await renderPostCreateView()
 
     await fireEvent.update(screen.getByTestId('post-body'), 'こんにちは')
 
     expect(screen.getByTestId('post-body-counter')).toHaveTextContent('5/280')
   })
 
-  it('投稿成功時にタイムラインへ遷移する', async () => {
+  it('投稿成功時に遷移元の画面へ戻る（タイムラインから開いた場合）', async () => {
     vi.mocked(apiClient.post).mockResolvedValueOnce({ data: { id: 1, body: 'テスト' } })
-    const { router } = renderPostCreateView()
+    const { router } = await renderPostCreateView('timeline')
     await router.isReady()
 
     await fireEvent.update(screen.getByTestId('post-body'), 'テスト')
@@ -64,14 +72,28 @@ describe('PostCreateView', () => {
     })
   })
 
-  it('画像が無いときは投稿ボタンがdisabledになる（イラスト投稿は画像必須）', () => {
-    renderPostCreateView()
+  it('投稿成功時に遷移元の画面へ戻る（プロフィール画面から開いた場合）', async () => {
+    vi.mocked(apiClient.post).mockResolvedValueOnce({ data: { id: 1, body: 'テスト' } })
+    const { router } = await renderPostCreateView('profile')
+    await router.isReady()
+
+    await selectImage(makeFile())
+    await fireEvent.click(screen.getByTestId('post-compose-submit'))
+
+    await waitFor(() => {
+      expect(router.currentRoute.value.name).toBe('profile')
+      expect(router.currentRoute.value.params.id).toBe('1')
+    })
+  })
+
+  it('画像が無いときは投稿ボタンがdisabledになる（イラスト投稿は画像必須）', async () => {
+    await renderPostCreateView()
 
     expect(screen.getByTestId('post-compose-submit')).toBeDisabled()
   })
 
   it('本文を入力しても画像が無ければ投稿ボタンはdisabledのまま', async () => {
-    renderPostCreateView()
+    await renderPostCreateView()
 
     await fireEvent.update(screen.getByTestId('post-body'), 'テスト')
 
@@ -79,7 +101,7 @@ describe('PostCreateView', () => {
   })
 
   it('小説を選ぶとタイトル欄が現れ、タイトル・本文の両方を入力するまで投稿ボタンはdisabledのまま', async () => {
-    renderPostCreateView()
+    await renderPostCreateView()
 
     await fireEvent.click(screen.getByTestId('post-type-novel'))
     expect(screen.getByTestId('post-compose-submit')).toBeDisabled()
@@ -93,7 +115,7 @@ describe('PostCreateView', () => {
 
   it('post_type・titleを含めて送信する', async () => {
     vi.mocked(apiClient.post).mockResolvedValueOnce({ data: { id: 1 } })
-    renderPostCreateView()
+    await renderPostCreateView()
 
     await fireEvent.click(screen.getByTestId('post-type-novel'))
     await fireEvent.update(screen.getByTestId('post-title'), 'タイトル')
@@ -107,8 +129,8 @@ describe('PostCreateView', () => {
     })
   })
 
-  it('キャンセルでタイムラインへ戻る', async () => {
-    const { router } = renderPostCreateView()
+  it('キャンセルで遷移元の画面へ戻る', async () => {
+    const { router } = await renderPostCreateView('timeline')
     await router.isReady()
 
     await fireEvent.click(screen.getByTestId('post-compose-cancel'))
@@ -119,7 +141,7 @@ describe('PostCreateView', () => {
   })
 
   it('画像を選ぶとプレビューが表示され、削除ボタンで取り消せる', async () => {
-    renderPostCreateView()
+    await renderPostCreateView()
 
     await selectImage(makeFile())
 
@@ -131,7 +153,7 @@ describe('PostCreateView', () => {
   })
 
   it('本文が空でも画像があれば投稿ボタンが有効になる', async () => {
-    renderPostCreateView()
+    await renderPostCreateView()
 
     await selectImage(makeFile())
 
@@ -139,7 +161,7 @@ describe('PostCreateView', () => {
   })
 
   it('4枚選択すると追加枠が消える', async () => {
-    renderPostCreateView()
+    await renderPostCreateView()
 
     for (let i = 0; i < 4; i++) {
       await selectImage(makeFile(`${i}.jpg`))
@@ -149,7 +171,7 @@ describe('PostCreateView', () => {
   })
 
   it('jpg/png以外の画像を選ぶとピックエラーが表示され送信されない', async () => {
-    renderPostCreateView()
+    await renderPostCreateView()
 
     await selectImage(makeFile('a.gif', 'image/gif'))
 

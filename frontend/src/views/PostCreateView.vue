@@ -44,7 +44,10 @@ const submitDisabled = computed(() =>
 async function handleSubmit() {
   const post = await submit()
   if (post) {
-    router.push({ name: 'timeline' })
+    // 投稿作成はタイムライン・プロフィール等の複数画面から開けるため、常にタイムラインへ
+    // 遷移させるのではなく、実際に遷移してきた画面へそのまま戻る
+    // （PostEditView.vueのhandleSubmitと同じ考え方）
+    router.back()
   }
 }
 </script>
@@ -71,6 +74,6 @@ async function handleSubmit() {
     @add-image="onAddImage"
     @remove-image="removeImage"
     @submit="handleSubmit"
-    @cancel="router.push({ name: 'timeline' })"
+    @cancel="router.back()"
   />
 </template>
