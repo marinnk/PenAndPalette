@@ -179,34 +179,6 @@ describe('PostCard', () => {
     expect(screen.getAllByRole('img')).toHaveLength(3)
   })
 
-  it('imageLimitを指定すると、その枚数までしか画像を表示しない（S03イラストタブのグリッド用）', async () => {
-    const withImages = {
-      ...post,
-      images: [
-        'https://example.com/1.jpg',
-        'https://example.com/2.jpg',
-        'https://example.com/3.jpg',
-      ],
-    }
-    const { router } = renderPostCard({ post: withImages, imageLimit: 1 })
-    await router.isReady()
-
-    const images = screen.getAllByRole('img')
-    expect(images).toHaveLength(1)
-    expect(images[0]).toHaveAttribute('src', 'https://example.com/1.jpg')
-  })
-
-  it('imageLimitを指定しない場合は添付画像を全て表示する（一覧・詳細画面の既定動作）', async () => {
-    const withImages = {
-      ...post,
-      images: ['https://example.com/1.jpg', 'https://example.com/2.jpg'],
-    }
-    const { router } = renderPostCard({ post: withImages })
-    await router.isReady()
-
-    expect(screen.getAllByRole('img')).toHaveLength(2)
-  })
-
   it('本文が画像より上に表示される（投稿詳細画面と同じ並び）', async () => {
     const withImages = { ...post, images: ['https://example.com/1.jpg'] }
     const { router } = renderPostCard({ post: withImages })

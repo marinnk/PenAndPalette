@@ -73,7 +73,7 @@ watch(postType, (newPostType) => {
 <template>
   <div>
     <AppHeader />
-    <main class="timeline" :class="{ 'timeline-grid': postType === 'illustration' }">
+    <main class="timeline">
       <button
         type="button"
         class="form-submit timeline-compose-button"
@@ -99,26 +99,19 @@ watch(postType, (newPostType) => {
       <p v-else-if="posts.length === 0" class="empty-state" data-testid="timeline-empty">
         {{ emptyMessage() }}
       </p>
-      <!-- イラストタブは2列のグリッド、小説タブは単一列のリストで並べる。カードの内容
-      （本文・タグ等）自体はどちらのタブでも同じPostCardを使う（画面設計書114〜167行目）。
-      グリッドでは投稿ごとに枚数が違う画像を全部表示すると見た目が揃わないため、
-      image-limit=1で1枚目だけに絞る（一覧・詳細では全枚数を表示） -->
-      <div
-        v-else
-        :class="{ 'post-card-grid': postType === 'illustration' }"
-        :data-testid="postType === 'illustration' ? 'illustration-grid' : undefined"
-      >
+      <!-- イラスト／小説どちらのタブも同じPostCardを単一列で並べる。タブによって変わるのは
+      post_typeによる絞り込みだけで、見た目（画像枚数・並び方）は共通（画面設計書114〜167行目） -->
+      <template v-else>
         <PostCard
           v-for="post in posts"
           :key="post.id"
           :post="post"
           :pending="isPending(post.id) || isDeleting(post.id)"
-          :image-limit="postType === 'illustration' ? 1 : undefined"
           @toggle-like="toggleLike"
           @toggle-want="toggleWant"
           @delete="deletePost"
         />
-      </div>
+      </template>
 
       <div ref="sentinel" data-testid="timeline-sentinel"></div>
     </main>

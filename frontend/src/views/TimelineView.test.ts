@@ -94,7 +94,7 @@ afterEach(() => {
 })
 
 describe('TimelineView', () => {
-  it('マウント時にGET /api/posts?scope=all&post_type=illustrationで一覧取得し、イラストタブは投稿カードを2〜4列のグリッドで並べる', async () => {
+  it('マウント時にGET /api/posts?scope=all&post_type=illustrationで一覧取得する', async () => {
     mockGet([{ results: [makePost(1)], has_more: false }])
     const { router } = renderTimelineView()
     await router.isReady()
@@ -103,9 +103,31 @@ describe('TimelineView', () => {
       expect(apiClient.get).toHaveBeenCalledWith('/api/posts', {
         params: { scope: 'all', post_type: 'illustration', limit: 20 },
       })
-      expect(screen.getByTestId('illustration-grid')).toBeInTheDocument()
       expect(screen.getByTestId('post-card-1')).toBeInTheDocument()
       expect(screen.getByText('投稿1')).toBeInTheDocument()
+    })
+  })
+
+  it('複数枚添付したイラスト投稿は、タイムライン上でも添付した画像を全て表示する', async () => {
+    mockGet([
+      {
+        results: [
+          makePost(1, {
+            images: [
+              'https://example.com/1.jpg',
+              'https://example.com/2.jpg',
+              'https://example.com/3.jpg',
+            ],
+          }),
+        ],
+        has_more: false,
+      },
+    ])
+    const { router } = renderTimelineView()
+    await router.isReady()
+
+    await waitFor(() => {
+      expect(screen.getAllByAltText(/^投稿画像/)).toHaveLength(3)
     })
   })
 
@@ -130,14 +152,14 @@ describe('TimelineView', () => {
     })
   })
 
-  it('小説タブに切り替えるとpost_type=novelで再取得し、グリッドではなく単一列のリストになる（全体／フォロー中とは独立）', async () => {
+  it('小説タブに切り替えるとpost_type=novelで再取得する（全体／フォロー中とは独立）', async () => {
     mockGet([
       { results: [makePost(1)], has_more: false },
       { results: [makePost(2, { post_type: 'novel', title: '小説タイトル' })], has_more: false },
     ])
     const { router } = renderTimelineView()
     await router.isReady()
-    await waitFor(() => expect(screen.getByTestId('illustration-grid')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByTestId('post-card-1')).toBeInTheDocument())
 
     await fireEvent.click(screen.getByTestId('tab-novel'))
 
@@ -146,7 +168,7 @@ describe('TimelineView', () => {
         params: { scope: 'all', post_type: 'novel', limit: 20 },
       })
       expect(screen.getByText('【小説タイトル】')).toBeInTheDocument()
-      expect(screen.queryByTestId('illustration-grid')).not.toBeInTheDocument()
+      expect(screen.queryByTestId('post-card-1')).not.toBeInTheDocument()
     })
   })
 
@@ -157,7 +179,7 @@ describe('TimelineView', () => {
     ])
     const { router } = renderTimelineView()
     await router.isReady()
-    await waitFor(() => expect(screen.getByTestId('illustration-grid')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByTestId('post-card-1')).toBeInTheDocument())
 
     await fireEvent.click(screen.getByTestId('tab-following'))
 
