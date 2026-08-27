@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { apiClient } from '@/lib/apiClient'
+import { createLatestRequest } from '@/lib/latestRequest'
 import { useReactablePosts } from '@/composables/usePostReactions'
 import { useDeletablePosts } from '@/composables/usePostDelete'
 import type { Post, PostListResponse, PostType, TimelineScope } from '@/types/post'
@@ -35,11 +36,12 @@ export function useTimeline() {
   // 表示中の投稿が0件になった場合に「まだ何も読み込んでいない」と区別できず、
   // サーバーにはまだ投稿が残っている（hasMore=true）のに追加読み込みができなくなるため
   let oldestLoadedId: number | null = null
-  // load() の世代番号。呼ばれるたびに増やし、応答が届いたときに最新でなければ結果を破棄する。
+  // load() の世代トークン。呼ばれるたびに begin() し、応答が届いたときに古ければ結果を破棄する。
   // これが無いと、タブを素早く切り替えたとき先に始まった load の応答が後から届いて
-  // 新しいタブの一覧を上書きしてしまう（useComments/usePostDetail の latestRequestedPostId と
-  // 同じ考え方。loadMore は元々このガードを持っていたが load には無かった）
-  let loadSeq = 0
+  // 新しいタブの一覧を上書きしてしまう。loadMore も同じトークンを見て、取得中に load が
+  // 走ったらその結果を捨てる（loadMore は元々このガードを持っていたが load には無かった）
+  const latestLoad = createLatestRequest()
+  let loadToken = latestLoad.begin()
 
   async function fetchPosts(params: Record<string, string | number>) {
     const { data } = await apiClient.get<PostListResponse>('/api/posts', { params })
@@ -80,7 +82,8 @@ export function useTimeline() {
     newScope: TimelineScope = scope.value,
     newPostType: PostType = postType.value,
   ) {
-    const seq = ++loadSeq
+    loadToken = latestLoad.begin()
+    const token = loadToken
     scope.value = newScope
     postType.value = newPostType
     loading.value = true
@@ -100,23 +103,23 @@ export function useTimeline() {
         limit: PAGE_SIZE,
       })
       // 応答を待つ間に後発の load（タブの再切替）が始まっていたら、古い結果で上書きしない
-      if (seq !== loadSeq) return
+      if (token.isStale()) return
       posts.value = data.results
       hasMore.value = data.has_more
       pollAnchorId = data.results[0]?.id ?? 0
       oldestLoadedId = data.results[data.results.length - 1]?.id ?? null
       startPolling()
     } catch {
-      if (seq === loadSeq) error.value = true
+      if (!token.isStale()) error.value = true
     } finally {
-      if (seq === loadSeq) loading.value = false
+      if (!token.isStale()) loading.value = false
     }
   }
 
   async function loadMore() {
     if (!hasMore.value || loadingMore.value || oldestLoadedId === null) return
     loadingMore.value = true
-    const seq = loadSeq
+    const token = loadToken
     try {
       const data = await fetchPosts({
         scope: scope.value,
@@ -125,7 +128,7 @@ export function useTimeline() {
         limit: PAGE_SIZE,
       })
       // 応答を待つ間に load が走った（タブ切替・再読込）なら、この結果は捨てる
-      if (seq !== loadSeq) return
+      if (token.isStale()) return
       posts.value = [...posts.value, ...data.results]
       hasMore.value = data.has_more
       if (data.results.length > 0) {
