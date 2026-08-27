@@ -14,12 +14,23 @@ import type { Post } from '@/types/post'
 // （clickable=falseだけでは、投稿者が自分の投稿の場合に編集/削除ボタンが出てしまい、
 // 削除確認ダイアログの後に何も起きない・入力中の下書きを失って編集画面に飛ぶ、という
 // 誤操作を招くため）
+// imageLimitはS03イラストタブのグリッド表示専用。投稿ごとの添付枚数（1〜4枚）が
+// バラバラだとグリッド内でカードの見た目が揃わないため、TimelineView.vueから
+// 1を渡して1枚目だけを表示する。指定しなければ（一覧のリスト表示・詳細画面）
+// 添付画像を全て表示する
 const props = withDefaults(
-  defineProps<{ post: Post; clickable?: boolean; pending?: boolean; preview?: boolean }>(),
+  defineProps<{
+    post: Post
+    clickable?: boolean
+    pending?: boolean
+    preview?: boolean
+    imageLimit?: number
+  }>(),
   {
     clickable: true,
     pending: false,
     preview: false,
+    imageLimit: undefined,
   },
 )
 const emit = defineEmits<{
@@ -34,6 +45,9 @@ const auth = useAuthStore()
 const formattedDate = computed(() => props.post.created_at.slice(0, 10))
 // 自分の投稿にのみ[編集][削除]を表示する（画面設計書141行目「自分の投稿には[編集][削除]」）
 const isOwnPost = computed(() => auth.currentUser?.id === props.post.author.id)
+const displayedImages = computed(() =>
+  props.imageLimit === undefined ? props.post.images : props.post.images.slice(0, props.imageLimit),
+)
 
 function goToDetail() {
   if (!props.clickable) return
@@ -112,11 +126,11 @@ function onDeleteClick() {
       <span v-for="tag in post.tags" :key="tag.id" class="post-card-tag">#{{ tag.name }}</span>
     </p>
     <div
-      v-if="post.images.length > 0"
+      v-if="displayedImages.length > 0"
       class="post-card-images"
-      :class="`post-card-images-${post.images.length}`"
+      :class="`post-card-images-${displayedImages.length}`"
     >
-      <img v-for="(url, i) in post.images" :key="url" :src="url" :alt="`投稿画像${i + 1}`" />
+      <img v-for="(url, i) in displayedImages" :key="url" :src="url" :alt="`投稿画像${i + 1}`" />
     </div>
     <div v-if="!preview" class="post-card-actions">
       <button

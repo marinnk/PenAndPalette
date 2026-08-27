@@ -515,26 +515,33 @@ code {
   text-align: center;
 }
 
-/* S03 イラストタブ: 投稿カードを2〜4列のグリッドで並べる表示（画面幅が狭いときは2列、
-   広いときは4列。小説タブ（.timelineの単一列リスト）より横幅を広く使う） */
+/* S03 イラストタブ: 投稿カードを2列のグリッドで並べる表示（小説タブ＝.timelineの単一列
+   リストより横幅を広く使う） */
 .timeline-grid {
-  max-width: 1080px;
+  max-width: 820px;
 }
 
 .post-card-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 16px;
-}
-
-@media (min-width: 760px) {
-  .post-card-grid {
-    grid-template-columns: repeat(4, 1fr);
-  }
+  /* 初期値のstretchのままだと、同じ行の中で本文が長いカードに高さを合わせて
+     短いカードの下に余白ができてしまう。カードごとに内容量が違う（本文・タグの
+     有無、文字数）ため、各カードは自分の内容だけの高さに収める */
+  align-items: start;
 }
 
 .post-card-grid .post-card {
   margin-bottom: 0;
+}
+
+/* グリッド内のカードは、本文の長さやタグの有無で高さがバラつきすぎないよう
+   本文を3行に丸め、画像は1枚目のみ（PostCardのimageLimit）に絞って見た目を揃える */
+.post-card-grid .post-card-body {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 /* 投稿カード（S03/S05/S07で共通利用） */
