@@ -241,6 +241,23 @@ describe('PostCard', () => {
 
       expect(screen.queryByTestId('post-tags')).not.toBeInTheDocument()
     })
+
+    it('分類タグはそのタグで絞り込んだタイムラインへのリンクになっている', async () => {
+      const tagged = { ...post, tags: [{ id: 3, name: 'ファンタジー' }] }
+      const { router } = renderPostCard({ post: tagged })
+      await router.isReady()
+
+      expect(screen.getByTestId('post-tag-3')).toHaveAttribute('href', '/?tag=3')
+    })
+
+    it('preview表示では分類タグはリンクにせず表示のみ', async () => {
+      const tagged = { ...post, tags: [{ id: 3, name: 'ファンタジー' }] }
+      const { router } = renderPostCard({ post: tagged, preview: true, clickable: false })
+      await router.isReady()
+
+      expect(screen.getByTestId('post-tags')).toHaveTextContent('#ファンタジー')
+      expect(screen.queryByTestId('post-tag-3')).not.toBeInTheDocument()
+    })
   })
 
   describe('編集・削除（自分の投稿のみ表示、画面設計書141行目）', () => {

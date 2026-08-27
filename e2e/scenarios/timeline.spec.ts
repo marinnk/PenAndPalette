@@ -5,7 +5,7 @@
 // 新規利用者（誰もフォローしていない＝自分の投稿だけが出る）の「フォロー中」タブで行う。
 
 import { test, expect } from '../support/fixtures'
-import { createIllustrationPost, createNovelPost } from '../support/api'
+import { createIllustrationPost, createNovelPost, getTags } from '../support/api'
 import { postCards, postCardByText, timeline } from '../support/selectors'
 import { showFollowingTimeline } from '../support/helpers'
 
@@ -43,5 +43,32 @@ test.describe('タイムライン', () => {
     await showFollowingTimeline(page)
     await timeline.typeTab(page, 'novel').click()
     await expect(timeline.empty(page)).toBeVisible()
+  })
+
+  test('「絞り込み」で分類タグを選ぶと、そのタグの投稿だけに絞り込まれる', async ({
+    authedPage: page,
+  }) => {
+    // getTags は display_order 順の固定12件（docs/features/tag.md）。3番目=ファンタジー、4番目=SF
+    const tags = await getTags(page.request)
+    const [fantasy, sf] = [tags[2], tags[3]]
+    const fantasyBody = `e2e tag fantasy ${Date.now()}`
+    const sfBody = `e2e tag sf ${Date.now()}`
+    await createIllustrationPost(page.request, { body: fantasyBody, tagIds: [fantasy.id] })
+    await createIllustrationPost(page.request, { body: sfBody, tagIds: [sf.id] })
+
+    await showFollowingTimeline(page)
+    await expect(postCardByText(page, fantasyBody)).toBeVisible()
+    await expect(postCardByText(page, sfBody)).toBeVisible()
+
+    await timeline.filterToggle(page).click()
+    await timeline.filterTag(page, fantasy.id).click()
+
+    await expect(postCardByText(page, fantasyBody)).toBeVisible()
+    await expect(postCardByText(page, sfBody)).toHaveCount(0)
+    await expect(page).toHaveURL(new RegExp(`[?&]tag=${fantasy.id}(&|$)`))
+
+    // もう一度押すと絞り込み解除
+    await timeline.filterTag(page, fantasy.id).click()
+    await expect(postCardByText(page, sfBody)).toBeVisible()
   })
 })

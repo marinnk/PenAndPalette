@@ -306,6 +306,46 @@ describe('useTimeline', () => {
     timeline.stopPolling()
   })
 
+  it('tagId指定: tag_id付きで取得し、loadMore・pollでも引き継ぐ', async () => {
+    vi.mocked(apiClient.get).mockResolvedValueOnce({
+      data: { results: [makePost(2), makePost(1)], has_more: true },
+    })
+    const timeline = useTimeline()
+    await timeline.load('all', 'illustration', 3)
+
+    expect(apiClient.get).toHaveBeenLastCalledWith('/api/posts', {
+      params: { scope: 'all', post_type: 'illustration', tag_id: 3, limit: 20 },
+    })
+
+    vi.mocked(apiClient.get).mockResolvedValueOnce({
+      data: { results: [makePost(0)], has_more: false },
+    })
+    await timeline.loadMore()
+
+    expect(apiClient.get).toHaveBeenLastCalledWith('/api/posts', {
+      params: { scope: 'all', post_type: 'illustration', tag_id: 3, before_id: 1, limit: 20 },
+    })
+    timeline.stopPolling()
+  })
+
+  it('tagId=null: tag_idパラメータごと送らない（絞り込みなし）', async () => {
+    vi.mocked(apiClient.get).mockResolvedValueOnce({
+      data: { results: [makePost(1)], has_more: false },
+    })
+    const timeline = useTimeline()
+    await timeline.load('all', 'illustration', 3)
+
+    vi.mocked(apiClient.get).mockResolvedValueOnce({
+      data: { results: [makePost(2)], has_more: false },
+    })
+    await timeline.load('all', 'illustration', null)
+
+    expect(apiClient.get).toHaveBeenLastCalledWith('/api/posts', {
+      params: { scope: 'all', post_type: 'illustration', limit: 20 },
+    })
+    timeline.stopPolling()
+  })
+
   it('loadMore(): 応答待ちの間に種別タブが切り替わった場合、古い種別の結果は捨てる', async () => {
     vi.mocked(apiClient.get).mockResolvedValueOnce({
       data: { results: [makePost(2), makePost(1)], has_more: true },

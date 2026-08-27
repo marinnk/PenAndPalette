@@ -635,6 +635,31 @@ code {
   background: var(--accent-bg);
   color: var(--accent);
   font-size: 13px;
+  text-decoration: none;
+}
+
+a.post-card-tag:hover {
+  text-decoration: underline;
+}
+
+.timeline-filter {
+  margin-bottom: 16px;
+}
+
+.timeline-filter-toggle {
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  padding: 4px 0;
+  cursor: pointer;
+}
+
+.timeline-filter-body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
 }
 
 .post-card-body {
@@ -724,14 +749,15 @@ code {
   font-weight: 500;
 }
 
-/* S04 投稿作成画面: 分類タグをクリックして選択するバッジ（docs/features/tag.md、最大5個） */
+/* 分類タグをクリックして選択／絞り込みするバッジ。S04 投稿作成画面（最大5個・複数選択）と
+   S03 タイムラインの「絞り込み」（単一選択）で共通（docs/features/tag.md） */
 .post-compose-tags {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
 
-.post-compose-tag {
+.tag-chip {
   padding: 4px 14px;
   border: 1px solid var(--border);
   border-radius: 999px;
@@ -742,14 +768,14 @@ code {
   cursor: pointer;
 }
 
-.post-compose-tag.active {
+.tag-chip.active {
   border-color: var(--accent);
   background: var(--accent-bg);
   color: var(--accent);
   font-weight: 500;
 }
 
-.post-compose-tag:disabled {
+.tag-chip:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }

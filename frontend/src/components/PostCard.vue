@@ -109,7 +109,19 @@ function onDeleteClick() {
     </p>
     <p v-if="post.body" class="post-card-body">{{ post.body }}</p>
     <p v-if="post.tags.length > 0" class="post-card-tags" data-testid="post-tags">
-      <span v-for="tag in post.tags" :key="tag.id" class="post-card-tag">#{{ tag.name }}</span>
+      <!-- タグをタップするとそのタグで絞り込んだタイムライン（S03）へ遷移する。
+           preview（S06のプレビュー）では遷移させず表示のみ -->
+      <template v-for="tag in post.tags" :key="tag.id">
+        <RouterLink
+          v-if="!preview"
+          :to="{ name: 'timeline', query: { tag: tag.id } }"
+          class="post-card-tag"
+          :data-testid="`post-tag-${tag.id}`"
+          @click.stop
+          >#{{ tag.name }}</RouterLink
+        >
+        <span v-else class="post-card-tag">#{{ tag.name }}</span>
+      </template>
     </p>
     <div
       v-if="post.images.length > 0"

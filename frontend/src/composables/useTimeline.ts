@@ -20,6 +20,9 @@ export function useTimeline() {
   const scope = ref<TimelineScope>('all')
   // 「全体／フォロー中」（scope）とは独立した軸。組み合わせて絞り込める（画面設計書114〜145行目）
   const postType = ref<PostType>('illustration')
+  // 分類タグによる絞り込み（S03「絞り込み」セクション）。scope・postTypeとは独立した軸で
+  // 単一選択。nullは絞り込みなし。バックエンドへはtag_idとして渡す（基本設計書6.3章）
+  const tagId = ref<number | null>(null)
   // バナーに表示する新着件数。反映（revealNewPosts）されるまで一覧には混ぜない
   const newPostCount = ref(0)
 
@@ -48,6 +51,17 @@ export function useTimeline() {
     return data
   }
 
+  // scope・post_type・tag_id はどの取得（初回・追加・ポーリング）でも共通で送る絞り込み軸。
+  // tag_id は選択時のみ付ける（null のときはパラメータごと省略＝絞り込みなし）
+  function filterParams(): Record<string, string | number> {
+    const params: Record<string, string | number> = {
+      scope: scope.value,
+      post_type: postType.value,
+    }
+    if (tagId.value !== null) params.tag_id = tagId.value
+    return params
+  }
+
   function stopPolling() {
     if (pollTimer !== null) {
       clearInterval(pollTimer)
@@ -57,11 +71,7 @@ export function useTimeline() {
 
   async function poll() {
     try {
-      const data = await fetchPosts({
-        scope: scope.value,
-        post_type: postType.value,
-        after_id: pollAnchorId,
-      })
+      const data = await fetchPosts({ ...filterParams(), after_id: pollAnchorId })
       if (data.results.length > 0) {
         // 複数回のtickで見つかった新着はバナーの件数に積み上げる（上書きしない）
         pendingNewPosts = [...data.results, ...pendingNewPosts]
@@ -81,11 +91,13 @@ export function useTimeline() {
   async function load(
     newScope: TimelineScope = scope.value,
     newPostType: PostType = postType.value,
+    newTagId: number | null = tagId.value,
   ) {
     loadToken = latestLoad.begin()
     const token = loadToken
     scope.value = newScope
     postType.value = newPostType
+    tagId.value = newTagId
     loading.value = true
     error.value = false
     deleteError.value = null
@@ -97,11 +109,7 @@ export function useTimeline() {
     // 投稿を混ぜてしまうことがなくなる
     oldestLoadedId = null
     try {
-      const data = await fetchPosts({
-        scope: newScope,
-        post_type: newPostType,
-        limit: PAGE_SIZE,
-      })
+      const data = await fetchPosts({ ...filterParams(), limit: PAGE_SIZE })
       // 応答を待つ間に後発の load（タブの再切替）が始まっていたら、古い結果で上書きしない
       if (token.isStale()) return
       posts.value = data.results
@@ -122,8 +130,7 @@ export function useTimeline() {
     const token = loadToken
     try {
       const data = await fetchPosts({
-        scope: scope.value,
-        post_type: postType.value,
+        ...filterParams(),
         before_id: oldestLoadedId,
         limit: PAGE_SIZE,
       })
@@ -153,6 +160,7 @@ export function useTimeline() {
     error,
     scope,
     postType,
+    tagId,
     newPostCount,
     reactionError,
     isPending,

@@ -1,7 +1,7 @@
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from posts.models import Post
+from posts.models import Post, Tag
 from posts.tests.conftest import create_post, create_post_image
 from users.models import Follow
 from users.tests.conftest import DEFAULT_PASSWORD, create_user
@@ -250,3 +250,75 @@ class PostListTests(APITestCase):
         self.assertIn(followee_novel.id, ids)
         for row in response.json()["results"]:
             self.assertEqual(row["post_type"], "novel")
+
+    def test_tag_id_filters_to_posts_with_that_tag(self):
+        self._login()
+        fantasy = Tag.objects.get(name="ファンタジー")
+        sf = Tag.objects.get(name="SF")
+        tagged = create_post(self.user)
+        tagged.tags.set([fantasy])
+        other = create_post(self.user)
+        other.tags.set([sf])
+        create_post(self.user)  # タグなし
+
+        response = self.client.get(self.url, {"tag_id": fantasy.id})
+
+        ids = [row["id"] for row in response.json()["results"]]
+        self.assertEqual(ids, [tagged.id])
+
+    def test_tag_id_combines_with_scope_and_post_type(self):
+        """tag_idはscope・post_typeとは独立した軸で、自由に組み合わせられる（基本設計書6.3章）。"""
+        self._login()
+        fantasy = Tag.objects.get(name="ファンタジー")
+        followee = create_user(
+            username="followee-for-tag",
+            email="followee-for-tag@example.com",
+            display_name="FolloweeForTag",
+        )
+        Follow.objects.create(follower=self.user, followee=followee)
+        match = create_post(
+            followee, post_type=Post.PostType.NOVEL, title="フォロー中の小説", body="本文"
+        )
+        match.tags.set([fantasy])
+        followee_illust = create_post(followee, post_type=Post.PostType.ILLUSTRATION)
+        followee_illust.tags.set([fantasy])
+        followee_novel_no_tag = create_post(
+            followee, post_type=Post.PostType.NOVEL, title="タグなし小説", body="本文"
+        )
+
+        response = self.client.get(
+            self.url, {"scope": "following", "post_type": "novel", "tag_id": fantasy.id}
+        )
+
+        ids = [row["id"] for row in response.json()["results"]]
+        self.assertEqual(ids, [match.id])
+        self.assertNotIn(followee_illust.id, ids)
+        self.assertNotIn(followee_novel_no_tag.id, ids)
+
+    def test_unknown_tag_id_returns_empty_results_not_400(self):
+        self._login()
+        create_post(self.user)
+
+        response = self.client.get(self.url, {"tag_id": 999999})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.json()["results"], [])
+
+    def test_invalid_tag_id_returns_400(self):
+        self._login()
+
+        response = self.client.get(self.url, {"tag_id": "abc"})
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_tag_id_does_not_inflate_results_with_multiple_tags(self):
+        """1投稿が複数タグを持っていても、tag_id絞り込みで行が重複しないこと。"""
+        self._login()
+        fantasy = Tag.objects.get(name="ファンタジー")
+        multi = create_post(self.user)
+        multi.tags.set(list(Tag.objects.all()[:5]))
+
+        response = self.client.get(self.url, {"tag_id": fantasy.id})
+
+        ids = [row["id"] for row in response.json()["results"]]
+        self.assertEqual(ids, [multi.id])

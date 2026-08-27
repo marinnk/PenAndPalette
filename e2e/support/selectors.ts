@@ -41,6 +41,8 @@ export const timeline = {
   typeTab: (page: Page, type: 'illustration' | 'novel') => page.getByTestId(`tab-${type}`),
   empty: (page: Page) => page.getByTestId('timeline-empty'),
   sentinel: (page: Page) => page.getByTestId('timeline-sentinel'),
+  filterToggle: (page: Page) => page.getByTestId('filter-toggle'),
+  filterTag: (page: Page, tagId: number) => page.getByTestId(`filter-tag-${tagId}`),
 }
 
 // 投稿カード（article[data-testid="post-card-{id}"]）。styling クラス `.post-card` ではなく

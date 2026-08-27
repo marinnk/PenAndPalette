@@ -218,7 +218,7 @@ function onToggleTag(tagId: number) {
             v-for="tag in tags"
             :key="tag.id"
             type="button"
-            class="post-compose-tag"
+            class="tag-chip"
             :class="{ active: isTagSelected(tag.id) }"
             :aria-pressed="isTagSelected(tag.id)"
             :disabled="!isTagSelected(tag.id) && selectedTagIds.length >= MAX_POST_TAGS"
