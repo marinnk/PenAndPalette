@@ -9,6 +9,7 @@
   --accent-border: rgba(192, 115, 80, 0.5);
   --social-bg: rgba(244, 243, 236, 0.5);
   --shadow: rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
+  --scrim: transparent;
 
   --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
   --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
@@ -41,6 +42,7 @@
     --accent-border: rgba(226, 145, 109, 0.5);
     --social-bg: rgba(47, 48, 58, 0.5);
     --shadow: rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
+    --scrim: rgba(8, 8, 16, 0.55);
   }
 
   #social .button-icon {
@@ -287,6 +289,46 @@ code {
   font-size: 28px;
   margin: 0 0 24px;
   text-align: center;
+}
+
+/* S01ログイン・S02新規登録共通の左右分割レイアウト（AuthLayout.vue）。
+   左側にオリジナルイラスト、右側に.form-cardを配置する。
+   #app（flex-direction: column, min-height: 100svh）の子として高さを分け合う */
+.auth-layout {
+  display: flex;
+  flex-grow: 1;
+}
+
+.auth-illustration {
+  flex: 1 1 55%;
+  position: relative;
+  background-image: url('./assets/images/auth-illustration.webp');
+  background-size: cover;
+  background-position: center top;
+
+  /* イラスト自体は明るいトーンのため、ダークモードでは--scrim（既定はtransparent、
+     ダーク時のみ暗色）を重ねて背景色（--bg）に馴染ませる */
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--scrim);
+  }
+
+  @media (max-width: 1024px) {
+    display: none;
+  }
+}
+
+.auth-form-panel {
+  flex: 1 1 45%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.auth-layout .form-card {
+  margin: 0;
 }
 
 .form-field {
