@@ -72,6 +72,33 @@ describe('useProfile', () => {
     expect(loadedProfile.value).toBeNull()
   })
 
+  it('load: 先に始まった読み込みの応答が後から届いても、新しい利用者の表示を上書きしない', async () => {
+    const profile2 = { ...profile, id: 2, username: 'jiro', display_name: '次郎' }
+    let resolveFirst!: (v: unknown) => void
+    vi.mocked(apiClient.get).mockImplementation((url: string) => {
+      if (url === '/api/users/1') {
+        return new Promise((resolve) => {
+          resolveFirst = resolve
+        })
+      }
+      if (url === '/api/users/2') return Promise.resolve({ data: profile2 })
+      return Promise.resolve({ data: { results: [], has_more: false } })
+    })
+
+    const { load, profile: loadedProfile, loading } = useProfile()
+    const first = load(1)
+    const second = load(2)
+    await second
+    // 後発（利用者2）の応答が先に反映される
+    expect(loadedProfile.value).toEqual(profile2)
+
+    // 先発（利用者1）の応答が遅れて届いても捨てられる
+    resolveFirst({ data: profile })
+    await first
+    expect(loadedProfile.value).toEqual(profile2)
+    expect(loading.value).toBe(false)
+  })
+
   it('load: 前回の削除失敗エラーは新しい読み込みでクリアされる（別の利用者への遷移で古いエラーを残さない）', async () => {
     vi.mocked(apiClient.get).mockImplementation((url: string) => {
       if (url === '/api/users/1') return Promise.resolve({ data: profile })

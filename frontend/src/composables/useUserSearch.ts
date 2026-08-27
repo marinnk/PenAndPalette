@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { apiClient } from '@/lib/apiClient'
+import { createLatestRequest } from '@/lib/latestRequest'
 import type { AuthUser } from '@/types/auth'
 
 // S09 ユーザー検索画面。基本設計書6.8章のGET /api/users/?qは
@@ -13,19 +14,26 @@ export function useUserSearch() {
   const error = ref(false)
   const hasSearched = ref(false)
 
+  // search呼び出しの世代トークン。キーワードを変えて短時間に連続検索したとき、
+  // 先に始まった検索の応答が後から届いて新しいキーワードの結果を上書きするのを防ぐ
+  const latestSearch = createLatestRequest()
+
   async function search() {
     error.value = false
     const trimmed = keyword.value.trim()
     if (!trimmed) return
+    const token = latestSearch.begin()
     hasSearched.value = true
     loading.value = true
     try {
       const { data } = await apiClient.get<AuthUser[]>('/api/users/', { params: { q: trimmed } })
+      if (token.isStale()) return
       users.value = data
     } catch {
+      if (token.isStale()) return
       error.value = true
     } finally {
-      loading.value = false
+      if (!token.isStale()) loading.value = false
     }
   }
 

@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 import { apiClient } from '@/lib/apiClient'
 import { extractDetail, extractFieldErrors, extractNonFieldError } from '@/lib/apiError'
+import { createLatestRequest } from '@/lib/latestRequest'
 import { validateCommentImage } from '@/composables/postImageValidation'
 import { useSingleImagePreview } from '@/composables/useSingleImagePreview'
 import type { Comment } from '@/types/comment'
@@ -16,11 +17,11 @@ export function useComments() {
   const comments = ref<Comment[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
-  // 直近で開始したfetchComments呼び出しのpostId。複数の投稿間を素早く行き来した場合に、
+  // fetchComments呼び出しの世代トークン。複数の投稿間を素早く行き来した場合に、
   // 後から発行したリクエストより前のリクエストの応答が遅れて返ってくる（ネットワークの
   // 遅延・順序入れ替わり）ことがあるため、応答を反映する直前に「これはまだ最新の要求か」を
   // 確認し、古い応答が新しい投稿のコメントを上書きしてしまうのを防ぐ
-  let latestRequestedPostId = 0
+  const latestFetch = createLatestRequest()
 
   // コメント投稿フォームの下書き状態。usePostCreateのbody/imagesと同じ形で、
   // composableがフォームの入力状態ごと持つことでCommentComposeFormを純粋な表示専用に保てる
@@ -46,7 +47,7 @@ export function useComments() {
   }
 
   async function fetchComments(postId: number) {
-    latestRequestedPostId = postId
+    const token = latestFetch.begin()
     loading.value = true
     error.value = null
     // 別の投稿へ遷移した直後は、前の投稿のコメントを残したまま新しいコメントの取得を
@@ -58,13 +59,13 @@ export function useComments() {
       const { data } = await apiClient.get<Comment[]>(`/api/posts/${postId}/comments`)
       // 応答が返ってきた時点で、既にもっと新しい投稿への切り替えが始まっていたら
       // （古い応答が後から届いた場合）、この結果は捨てる
-      if (postId !== latestRequestedPostId) return
+      if (token.isStale()) return
       comments.value = data
     } catch {
-      if (postId !== latestRequestedPostId) return
+      if (token.isStale()) return
       error.value = 'コメントの取得に失敗しました。'
     } finally {
-      if (postId === latestRequestedPostId) loading.value = false
+      if (!token.isStale()) loading.value = false
     }
   }
 

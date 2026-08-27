@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { apiClient } from '@/lib/apiClient'
+import { createLatestRequest } from '@/lib/latestRequest'
 import { setLiked, setWanted } from '@/composables/usePostReactions'
 import { deletePostById } from '@/composables/usePostDelete'
 import type { Post } from '@/types/post'
@@ -13,24 +14,24 @@ export function usePostDetail() {
   const reactionPending = ref(false)
   const deleteError = ref<string | null>(null)
   const deleting = ref(false)
-  // 直近で開始したload呼び出しのpostId。useComments.fetchCommentsと同じ理由で、
-  // 投稿間を素早く行き来した際に古い応答が新しい投稿の表示を上書きしないようにする
-  let latestRequestedPostId = 0
+  // load呼び出しの世代トークン。useComments.fetchCommentsと同じ理由で、投稿間を
+  // 素早く行き来した際に古い応答が新しい投稿の表示を上書きしないようにする
+  const latestLoad = createLatestRequest()
 
   async function load(postId: number) {
-    latestRequestedPostId = postId
+    const token = latestLoad.begin()
     loading.value = true
     error.value = false
     deleteError.value = null
     try {
       const { data } = await apiClient.get<Post>(`/api/posts/${postId}`)
-      if (postId !== latestRequestedPostId) return
+      if (token.isStale()) return
       post.value = data
     } catch {
-      if (postId !== latestRequestedPostId) return
+      if (token.isStale()) return
       error.value = true
     } finally {
-      if (postId === latestRequestedPostId) loading.value = false
+      if (!token.isStale()) loading.value = false
     }
   }
 

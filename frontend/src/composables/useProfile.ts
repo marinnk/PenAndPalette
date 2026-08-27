@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { apiClient } from '@/lib/apiClient'
+import { createLatestRequest } from '@/lib/latestRequest'
 import { useReactablePosts } from '@/composables/usePostReactions'
 import { useDeletablePosts } from '@/composables/usePostDelete'
 import type { Post, PostListResponse } from '@/types/post'
@@ -17,7 +18,13 @@ export function useProfile() {
   const { reactionError, isPending, toggleLike, toggleWant } = useReactablePosts(posts)
   const { deleteError, isDeleting, deletePost } = useDeletablePosts(posts)
 
+  // load呼び出しの世代トークン。Vue Routerは/users/:id内の別idへの遷移でコンポーネント
+  // インスタンスを使い回すため、プロフィール間を素早く行き来すると先に始まったloadの
+  // 応答が後から届いて別ユーザーの表示を上書きしうる。それを防ぐ（useComments等と同じ）
+  const latestLoad = createLatestRequest()
+
   async function load(userId: number) {
+    const token = latestLoad.begin()
     loading.value = true
     error.value = false
     deleteError.value = null
@@ -27,12 +34,14 @@ export function useProfile() {
         apiClient.get<Profile>(`/api/users/${userId}`),
         apiClient.get<PostListResponse>('/api/posts', { params: { user_id: userId } }),
       ])
+      if (token.isStale()) return
       profile.value = profileRes.data
       posts.value = postsRes.data.results
     } catch {
+      if (token.isStale()) return
       error.value = true
     } finally {
-      loading.value = false
+      if (!token.isStale()) loading.value = false
     }
   }
 
