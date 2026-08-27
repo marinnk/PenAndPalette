@@ -26,6 +26,7 @@
 .
 ├── backend/    # Django（REST API）
 ├── frontend/   # Vue.js（画面）
+├── e2e/        # Playwright E2Eテスト（scenarios は CI で自動実行 / performance は手動）
 ├── docs/       # 要件定義・設計ドキュメント
 └── docker-compose.yml   # MySQL・MinIO（ローカル開発用）
 ```
