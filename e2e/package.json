@@ -1,0 +1,17 @@
+{
+  "name": "e2e-tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:scenarios": "playwright test --project=scenarios",
+    "test:performance": "playwright test --project=performance",
+    "test:all": "playwright test",
+    "report": "playwright show-report",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0",
+    "@types/node": "^24.13.2",
+    "typescript": "~5.9.2"
+  }
+}
