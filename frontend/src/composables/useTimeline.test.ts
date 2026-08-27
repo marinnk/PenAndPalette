@@ -94,6 +94,51 @@ describe('useTimeline', () => {
     timeline.stopPolling()
   })
 
+  it('load(): 応答待ちの間に別タブへ切り替えた場合、先発の結果で上書きしない', async () => {
+    // 全体タブのload()の応答が返る前に、フォロー中タブへ切り替える
+    let resolveFirst: (value: unknown) => void = () => {}
+    vi.mocked(apiClient.get).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveFirst = resolve
+        }),
+    )
+    const timeline = useTimeline()
+    const firstLoad = timeline.load('all')
+
+    vi.mocked(apiClient.get).mockResolvedValueOnce({
+      data: { results: [makePost(9)], has_more: false },
+    })
+    await timeline.load('following')
+
+    // 遅れて全体タブのload()の応答が返ってきても、フォロー中タブの一覧を上書きしない
+    resolveFirst({ data: { results: [makePost(2), makePost(1)], has_more: true } })
+    await firstLoad
+
+    expect(timeline.posts.value.map((p) => p.id)).toEqual([9])
+    expect(timeline.hasMore.value).toBe(false)
+    timeline.stopPolling()
+  })
+
+  it('loadMore(): タブ切り替え中（新しいloadの完了前）は動かない', async () => {
+    vi.mocked(apiClient.get).mockResolvedValueOnce({
+      data: { results: [makePost(2), makePost(1)], has_more: true },
+    })
+    const timeline = useTimeline()
+    await timeline.load('all')
+
+    // フォロー中タブのload()を開始（応答は保留）。load()入口でカーソルが無効化される
+    vi.mocked(apiClient.get).mockImplementationOnce(() => new Promise(() => {}))
+    timeline.load('following')
+
+    const callsBefore = vi.mocked(apiClient.get).mock.calls.length
+    await timeline.loadMore()
+
+    // 追加取得は走らない（古いカーソルで別タブの投稿を混ぜない）
+    expect(vi.mocked(apiClient.get).mock.calls.length).toBe(callsBefore)
+    timeline.stopPolling()
+  })
+
   it('ポーリング: 複数回のtickで新着件数が積み上がる（上書きしない）', async () => {
     vi.useFakeTimers()
     vi.mocked(apiClient.get).mockResolvedValueOnce({

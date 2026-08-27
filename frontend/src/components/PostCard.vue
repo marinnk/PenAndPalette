@@ -122,6 +122,7 @@ function onDeleteClick() {
       <button
         type="button"
         :class="{ active: post.liked_by_me }"
+        :aria-pressed="post.liked_by_me"
         :disabled="pending"
         :data-testid="`like-button-${post.id}`"
         @click.stop="emit('toggle-like', post)"
@@ -131,6 +132,7 @@ function onDeleteClick() {
       <button
         type="button"
         :class="{ active: post.wanted_by_me }"
+        :aria-pressed="post.wanted_by_me"
         :disabled="pending"
         :data-testid="`want-button-${post.id}`"
         @click.stop="emit('toggle-want', post)"

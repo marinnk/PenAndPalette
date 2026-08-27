@@ -35,6 +35,11 @@ export function useTimeline() {
   // 表示中の投稿が0件になった場合に「まだ何も読み込んでいない」と区別できず、
   // サーバーにはまだ投稿が残っている（hasMore=true）のに追加読み込みができなくなるため
   let oldestLoadedId: number | null = null
+  // load() の世代番号。呼ばれるたびに増やし、応答が届いたときに最新でなければ結果を破棄する。
+  // これが無いと、タブを素早く切り替えたとき先に始まった load の応答が後から届いて
+  // 新しいタブの一覧を上書きしてしまう（useComments/usePostDetail の latestRequestedPostId と
+  // 同じ考え方。loadMore は元々このガードを持っていたが load には無かった）
+  let loadSeq = 0
 
   async function fetchPosts(params: Record<string, string | number>) {
     const { data } = await apiClient.get<PostListResponse>('/api/posts', { params })
@@ -75,6 +80,7 @@ export function useTimeline() {
     newScope: TimelineScope = scope.value,
     newPostType: PostType = postType.value,
   ) {
+    const seq = ++loadSeq
     scope.value = newScope
     postType.value = newPostType
     loading.value = true
@@ -83,41 +89,43 @@ export function useTimeline() {
     // タブ切替は一覧をやり直すため、保留中の新着通知は持ち越さない
     pendingNewPosts = []
     newPostCount.value = 0
+    // 新しいタブの一覧をまだ取得していないので、追加読み込みのカーソルを一旦無効化する。
+    // これで新しい load が完了するまで loadMore() は動かず、古いカーソルで別タブの
+    // 投稿を混ぜてしまうことがなくなる
+    oldestLoadedId = null
     try {
       const data = await fetchPosts({
         scope: newScope,
         post_type: newPostType,
         limit: PAGE_SIZE,
       })
+      // 応答を待つ間に後発の load（タブの再切替）が始まっていたら、古い結果で上書きしない
+      if (seq !== loadSeq) return
       posts.value = data.results
       hasMore.value = data.has_more
       pollAnchorId = data.results[0]?.id ?? 0
       oldestLoadedId = data.results[data.results.length - 1]?.id ?? null
       startPolling()
     } catch {
-      error.value = true
+      if (seq === loadSeq) error.value = true
     } finally {
-      loading.value = false
+      if (seq === loadSeq) loading.value = false
     }
   }
 
   async function loadMore() {
     if (!hasMore.value || loadingMore.value || oldestLoadedId === null) return
     loadingMore.value = true
-    // 取得中にタブ（scope・postType）が切り替わっていないかを判定するため、
-    // リクエスト時点の値を保持する
-    const requestScope = scope.value
-    const requestPostType = postType.value
+    const seq = loadSeq
     try {
       const data = await fetchPosts({
-        scope: requestScope,
-        post_type: requestPostType,
+        scope: scope.value,
+        post_type: postType.value,
         before_id: oldestLoadedId,
         limit: PAGE_SIZE,
       })
-      // 応答が返ってくるまでの間にタブが切り替わっていたら、古いタブの結果は捨てる
-      // （捨てないと、切替後の一覧に古いタブの投稿が紛れ込む）
-      if (requestScope !== scope.value || requestPostType !== postType.value) return
+      // 応答を待つ間に load が走った（タブ切替・再読込）なら、この結果は捨てる
+      if (seq !== loadSeq) return
       posts.value = [...posts.value, ...data.results]
       hasMore.value = data.has_more
       if (data.results.length > 0) {

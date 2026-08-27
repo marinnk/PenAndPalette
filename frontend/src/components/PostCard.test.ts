@@ -69,6 +69,9 @@ describe('PostCard', () => {
     expect(screen.getByText('💬 コメント 2')).toBeInTheDocument()
     expect(screen.getByTestId('want-button-42')).toHaveClass('active')
     expect(screen.getByTestId('like-button-42')).not.toHaveClass('active')
+    // 押下状態は aria-pressed でも公開する（支援技術・E2E向け）
+    expect(screen.getByTestId('want-button-42')).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByTestId('like-button-42')).toHaveAttribute('aria-pressed', 'false')
   })
 
   it('カード本体クリックで投稿詳細へ遷移する', async () => {
