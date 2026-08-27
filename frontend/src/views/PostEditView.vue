@@ -1,19 +1,23 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import PostComposeForm from '@/components/PostComposeForm.vue'
 import { usePostEdit } from '@/composables/usePostEdit'
-import { MAX_IMAGES } from '@/composables/postImageValidation'
+import { useTags } from '@/composables/useTags'
+import { maxImagesForType } from '@/composables/postImageValidation'
 
 // S04 投稿作成画面を編集モードで開いた場合（画面設計書169行目）
 const props = defineProps<{ id: string }>()
 const router = useRouter()
 const {
+  postType,
+  title,
   body,
   keepImageIds,
   keepImagePreviews,
   images,
   imagePreviews,
+  selectedTagIds,
   loading,
   loadError,
   submitting,
@@ -25,6 +29,9 @@ const {
   removeNewImage,
   submit,
 } = usePostEdit()
+const { tags, load: loadTags } = useTags()
+
+onMounted(loadTags)
 
 const imagePickError = ref<string | null>(null)
 
@@ -51,6 +58,14 @@ function onRemoveImage(index: number) {
   }
 }
 
+// イラストは画像必須（本文は任意）、小説はタイトル・本文が必須
+// （docs/features/post.md 2.1節の入力ルール。usePostCreate/PostCreateView.vueと同じ判定）
+const submitDisabled = computed(() =>
+  postType.value === 'novel'
+    ? title.value.trim().length === 0 || body.value.trim().length === 0
+    : keepImageIds.value.length === 0 && images.value.length === 0,
+)
+
 async function handleSubmit() {
   const post = await submit()
   if (post) {
@@ -71,15 +86,21 @@ async function handleSubmit() {
   <PostComposeForm
     v-else
     mode="edit"
+    :post-type="postType"
+    :title="title"
     :body="body"
     :image-previews="[...keepImagePreviews, ...imagePreviews]"
-    :can-add-more="keepImageIds.length + images.length < MAX_IMAGES"
-    :submit-disabled="body.trim().length === 0 && keepImageIds.length === 0 && images.length === 0"
+    :can-add-more="keepImageIds.length + images.length < maxImagesForType(postType)"
+    :tags="tags"
+    :selected-tag-ids="selectedTagIds"
+    :submit-disabled="submitDisabled"
     :submitting="submitting"
     :error-message="errorMessage"
     :field-errors="fieldErrors"
     :image-pick-error="imagePickError"
+    @update:title="title = $event"
     @update:body="body = $event"
+    @update:tag-ids="selectedTagIds = $event"
     @add-image="onAddImage"
     @remove-image="onRemoveImage"
     @submit="handleSubmit"

@@ -571,6 +571,30 @@ code {
   cursor: not-allowed;
 }
 
+.post-card-title {
+  margin: 0 0 8px;
+  color: var(--text-h);
+  font-weight: 500;
+  font-size: 16px;
+}
+
+.post-card-tags {
+  margin: 0 0 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.post-card-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--accent-bg);
+  color: var(--accent);
+  font-size: 13px;
+}
+
 .post-card-body {
   margin: 0 0 12px;
   color: var(--text-h);
@@ -631,6 +655,61 @@ code {
 
 .post-card-comment-count {
   color: var(--text);
+}
+
+/* S04 投稿作成画面: イラスト/小説の種別切替（画面設計書169行目） */
+.post-type-switch {
+  display: flex;
+  gap: 8px;
+  max-width: 420px;
+  margin: 0 auto 20px;
+}
+
+.post-type-switch button {
+  flex: 1;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.post-type-switch button.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 500;
+}
+
+/* S04 投稿作成画面: 分類タグをクリックして選択するバッジ（docs/features/tag.md、最大5個） */
+.post-compose-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.post-compose-tag {
+  padding: 4px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.post-compose-tag.active {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.post-compose-tag:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* S04 投稿作成画面 */

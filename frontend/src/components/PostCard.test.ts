@@ -17,6 +17,9 @@ const post: Post = {
   body: '本文です',
   images: [],
   image_ids: [],
+  post_type: 'illustration',
+  title: '',
+  tags: [],
   like_count: 3,
   want_count: 1,
   comment_count: 2,
@@ -196,6 +199,45 @@ describe('PostCard', () => {
     await router.isReady()
 
     expect(screen.queryByText('本文です')).not.toBeInTheDocument()
+  })
+
+  describe('タイトル・分類タグ（画面設計書・docs/features/tag.md）', () => {
+    it('小説投稿はタイトルを【】付きで本文の上に表示する', async () => {
+      const novelPost = { ...post, post_type: 'novel' as const, title: 'タイトルです' }
+      const { router } = renderPostCard({ post: novelPost })
+      await router.isReady()
+
+      expect(screen.getByTestId('post-title')).toHaveTextContent('【タイトルです】')
+    })
+
+    it('イラスト投稿はタイトルを持たないため表示しない', async () => {
+      const { router } = renderPostCard()
+      await router.isReady()
+
+      expect(screen.queryByTestId('post-title')).not.toBeInTheDocument()
+    })
+
+    it('分類タグが選択されている場合、#タグ名の形で並べて表示する', async () => {
+      const tagged = {
+        ...post,
+        tags: [
+          { id: 1, name: 'オリジナル' },
+          { id: 2, name: 'ファンタジー' },
+        ],
+      }
+      const { router } = renderPostCard({ post: tagged })
+      await router.isReady()
+
+      expect(screen.getByTestId('post-tags')).toHaveTextContent('#オリジナル')
+      expect(screen.getByTestId('post-tags')).toHaveTextContent('#ファンタジー')
+    })
+
+    it('分類タグが無い場合はタグ行を表示しない', async () => {
+      const { router } = renderPostCard()
+      await router.isReady()
+
+      expect(screen.queryByTestId('post-tags')).not.toBeInTheDocument()
+    })
   })
 
   describe('編集・削除（自分の投稿のみ表示、画面設計書141行目）', () => {

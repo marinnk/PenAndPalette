@@ -29,8 +29,11 @@ function makePost(id: number, overrides: Partial<Post> = {}): Post {
     id,
     author: { id: 1, username: 'author', display_name: '投稿者', avatar_url: null },
     body: `投稿${id}`,
-    images: [],
-    image_ids: [],
+    images: ['https://example.com/1.jpg'],
+    image_ids: [1],
+    post_type: 'illustration',
+    title: '',
+    tags: [],
     like_count: 0,
     want_count: 0,
     comment_count: 0,
@@ -91,46 +94,101 @@ afterEach(() => {
 })
 
 describe('TimelineView', () => {
-  it('マウント時にGET /api/posts?scope=allで一覧取得する', async () => {
+  it('マウント時にGET /api/posts?scope=all&post_type=illustrationで一覧取得する', async () => {
     mockGet([{ results: [makePost(1)], has_more: false }])
     const { router } = renderTimelineView()
     await router.isReady()
 
     await waitFor(() => {
       expect(apiClient.get).toHaveBeenCalledWith('/api/posts', {
-        params: { scope: 'all', limit: 20 },
+        params: { scope: 'all', post_type: 'illustration', limit: 20 },
       })
+      expect(screen.getByTestId('post-card-1')).toBeInTheDocument()
       expect(screen.getByText('投稿1')).toBeInTheDocument()
     })
   })
 
-  it('投稿が無い場合は空状態メッセージを表示する', async () => {
-    mockGet([{ results: [], has_more: false }])
+  it('複数枚添付したイラスト投稿は、タイムライン上でも添付した画像を全て表示する', async () => {
+    mockGet([
+      {
+        results: [
+          makePost(1, {
+            images: [
+              'https://example.com/1.jpg',
+              'https://example.com/2.jpg',
+              'https://example.com/3.jpg',
+            ],
+          }),
+        ],
+        has_more: false,
+      },
+    ])
     const { router } = renderTimelineView()
     await router.isReady()
 
     await waitFor(() => {
-      expect(screen.getByTestId('timeline-empty')).toHaveTextContent('投稿がまだありません。')
+      expect(screen.getAllByAltText(/^投稿画像/)).toHaveLength(3)
     })
   })
 
-  it('フォロー中タブに切り替えるとscope=followingで再取得する', async () => {
+  it('投稿が無い場合は種別に応じた空状態メッセージを表示する', async () => {
+    mockGet([
+      { results: [], has_more: false },
+      { results: [], has_more: false },
+    ])
+    const { router } = renderTimelineView()
+    await router.isReady()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('timeline-empty')).toHaveTextContent(
+        'イラストの投稿がまだありません。',
+      )
+    })
+
+    await fireEvent.click(screen.getByTestId('tab-novel'))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('timeline-empty')).toHaveTextContent('小説の投稿がまだありません。')
+    })
+  })
+
+  it('小説タブに切り替えるとpost_type=novelで再取得する（全体／フォロー中とは独立）', async () => {
+    mockGet([
+      { results: [makePost(1)], has_more: false },
+      { results: [makePost(2, { post_type: 'novel', title: '小説タイトル' })], has_more: false },
+    ])
+    const { router } = renderTimelineView()
+    await router.isReady()
+    await waitFor(() => expect(screen.getByTestId('post-card-1')).toBeInTheDocument())
+
+    await fireEvent.click(screen.getByTestId('tab-novel'))
+
+    await waitFor(() => {
+      expect(apiClient.get).toHaveBeenLastCalledWith('/api/posts', {
+        params: { scope: 'all', post_type: 'novel', limit: 20 },
+      })
+      expect(screen.getByText('【小説タイトル】')).toBeInTheDocument()
+      expect(screen.queryByTestId('post-card-1')).not.toBeInTheDocument()
+    })
+  })
+
+  it('フォロー中タブに切り替えるとscope=followingで再取得する（種別タブとは独立）', async () => {
     mockGet([
       { results: [makePost(1)], has_more: false },
       { results: [], has_more: false },
     ])
     const { router } = renderTimelineView()
     await router.isReady()
-    await waitFor(() => expect(screen.getByText('投稿1')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByTestId('post-card-1')).toBeInTheDocument())
 
     await fireEvent.click(screen.getByTestId('tab-following'))
 
     await waitFor(() => {
       expect(apiClient.get).toHaveBeenLastCalledWith('/api/posts', {
-        params: { scope: 'following', limit: 20 },
+        params: { scope: 'following', post_type: 'illustration', limit: 20 },
       })
       expect(screen.getByTestId('timeline-empty')).toHaveTextContent(
-        'フォロー中の利用者の投稿がまだありません。',
+        'フォロー中の利用者のイラストの投稿がまだありません。',
       )
     })
   })
