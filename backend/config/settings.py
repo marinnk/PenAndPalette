@@ -10,10 +10,13 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
+import json
 import os
+import urllib.request
 from datetime import timedelta
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -34,19 +37,46 @@ def env_list(name, default=""):
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
+def env_int(name, default=0):
+    value = os.environ.get(name)
+    if value is None or not value.strip():
+        return default
+    return int(value)
+
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
-
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get(
-    "DJANGO_SECRET_KEY",
-    "django-insecure--5)p!nj-p8f*f1ifw-$o&&cs#5oef!sva)^423t^mrv$1)(+u-",
-)
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env_bool("DJANGO_DEBUG", default=True)
 
+# SECURITY WARNING: keep the secret key used in production secret!
+# 本番（DEBUG=False）はデプロイ側（Secrets Manager等）でDJANGO_SECRET_KEYを必ず注入する。
+# 未設定のまま起動させないよう、開発用のフォールバック値は DEBUG=True のときだけ使う。
+_DEV_SECRET_KEY = "django-insecure--5)p!nj-p8f*f1ifw-$o&&cs#5oef!sva)^423t^mrv$1)(+u-"
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "")
+if not SECRET_KEY:
+    if DEBUG:
+        SECRET_KEY = _DEV_SECRET_KEY
+    else:
+        raise ImproperlyConfigured("DJANGO_SECRET_KEY must be set when DJANGO_DEBUG is false.")
+
 ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", default="localhost,127.0.0.1")
+
+# ALBのターゲットグループのヘルスチェックは Host: <コンテナのプライベートIP> で届くため、
+# ECSのタスクメタデータエンドポイントからそのIPを取得してALLOWED_HOSTSに足す。
+# ローカル・CIではECS_CONTAINER_METADATA_URI_V4が無いので何もしない（例外も握りつぶす）。
+if not DEBUG and os.environ.get("ECS_CONTAINER_METADATA_URI_V4"):
+    try:
+        _metadata_url = f"{os.environ['ECS_CONTAINER_METADATA_URI_V4']}/task"
+        with urllib.request.urlopen(_metadata_url, timeout=1) as response:
+            _task_metadata = json.load(response)
+        for _container in _task_metadata.get("Containers", []):
+            for _network in _container.get("Networks", []):
+                ALLOWED_HOSTS.extend(_network.get("IPv4Addresses", []))
+    except Exception:
+        # メタデータ取得に失敗しても起動は止めない（ローカル・CIには存在しない）
+        pass
 
 
 # Application definition
@@ -78,6 +108,13 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
+
+# 本番のみ WhiteNoise で /admin の静的ファイルを gunicorn から直接配信する
+# （CDN/Nginx を別途置かずコンテナ単体で完結させる）。開発は runserver の staticfiles
+# 配信で足りるうえ、collectstatic 前提の WhiteNoise を挟むと警告が出るため入れない。
+# SecurityMiddleware の直後に置くのが WhiteNoise の推奨。
+if not DEBUG:
+    MIDDLEWARE.insert(1, "whitenoise.middleware.WhiteNoiseMiddleware")
 
 ROOT_URLCONF = "config.urls"
 
@@ -153,8 +190,11 @@ USE_TZ = True
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/6.1/howto/static-files/
+# このアプリの画面はVue.js（S3+CloudFront配信）で、Django側の静的ファイルは実質的に
+# /admin のCSS/JSのみ。本番は Dockerfile で collectstatic し、WhiteNoise で配信する。
 
 STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
 
 
 # Email
@@ -198,18 +238,53 @@ AUTH_COOKIE_SECURE = env_bool("AUTH_COOKIE_SECURE", default=not DEBUG)
 
 # django-cors-headers
 # 基本設計書 3.1節: 開発環境はVite(5173)とDjango(8000)の別オリジン間でCookieを送受信するため、
-# CORS_ALLOWED_ORIGINSを明示的に許可しCORS_ALLOW_CREDENTIALS = Trueとする
+# CORS_ALLOWED_ORIGINSを明示的に許可しCORS_ALLOW_CREDENTIALS = Trueとする。
+# 本番はCloudFrontの単一ディストリビューション（/api/* をALBへ、それ以外をS3へ振り分け）で
+# フロントとAPIを同一オリジンに見せるが、ブラウザは状態変化を伴うリクエスト（POST/PUT/DELETE）で
+# Originヘッダーを送るため、CloudFrontドメインを許可しておく必要がある。ドメインは apply 後まで
+# 確定しないため、完全一致（CORS_ALLOWED_ORIGINS）ではなく正規表現で
+# https://*.cloudfront.net を許可する（CORS_ALLOWED_ORIGIN_REGEXES に渡す）。
 
 CORS_ALLOWED_ORIGINS = env_list("CORS_ALLOWED_ORIGINS", default="http://localhost:5173")
+CORS_ALLOWED_ORIGIN_REGEXES = env_list("CORS_ALLOWED_ORIGIN_REGEXES")
 CORS_ALLOW_CREDENTIALS = True
+
+# Django admin を CloudFront ドメイン経由で使うため（API本体は CookieJWTAuthentication のみで
+# DRF の CSRF 検証対象外だが、admin のログインフォームには必要）。スキーム付きで指定する。
+CSRF_TRUSTED_ORIGINS = env_list("CSRF_TRUSTED_ORIGINS")
+
+# 本番のセキュリティ設定（DEBUG=Falseのときだけ有効化。個別に環境変数で上書きできる）
+if not DEBUG:
+    # CloudFront が AllViewer オリジンリクエストポリシーで転送するヘッダー。
+    # CloudFront〜ALB間はHTTPだが、これで Django は元リクエストがHTTPSだったと判定できる。
+    SECURE_PROXY_SSL_HEADER = ("HTTP_CLOUDFRONT_FORWARDED_PROTO", "https")
+    SESSION_COOKIE_SECURE = env_bool("SESSION_COOKIE_SECURE", default=True)
+    CSRF_COOKIE_SECURE = env_bool("CSRF_COOKIE_SECURE", default=True)
+    # HTTPSへのリダイレクトは CloudFront 側（viewer_protocol_policy = redirect-to-https）で
+    # 済ませる。Django側で行うと、リダイレクトを追わないALBのヘルスチェックが301を
+    # 不健全と誤判定するため False 固定にする。
+    SECURE_SSL_REDIRECT = False
+    # HSTS は既定で無効（0）。*.cloudfront.net は他プロジェクトと共有するドメインのため、
+    # includeSubDomains 付きで有効化すると影響範囲が広すぎる。独自ドメイン導入時に見直す。
+    SECURE_HSTS_SECONDS = env_int("SECURE_HSTS_SECONDS", default=0)
+
+    # `manage.py check --deploy` の指摘のうち、本構成では意図的に対応しないものを黙らせる。
+    # 詳細は docs/infrastructure-design.md 参照。
+    #   security.W004 (HSTS未設定): 上記のとおり共有ドメインのため既定で無効
+    #   security.W008 (SSL_REDIRECT未設定): CloudFront 側で redirect-to-https 済み
+    #   mail.E001: このアプリはメール送信機能を持たない（会員登録にメール確認なし）
+    SILENCED_SYSTEM_CHECKS = ["security.W004", "security.W008", "mail.E001"]
 
 # 画像ストレージ（Amazon S3 / 開発時はMinIO）
 # 基本設計書 1〜2章・6.3節: プロキシアップロード方式
 # （署名付きURLではなくサーバー経由でS3/MinIOに書き込む）。
 # docker-compose.ymlのminioサービスはバケットを匿名read公開しているため、
-# querystring_auth=Falseで署名なしの素のURLを生成する。addressing_style="path"は
-# MinIOがvirtual-hosted-style（バケット名をホスト名の一部にする）に対応していないため必須
+# querystring_auth=Falseで署名なしの素のURLを生成する（本番S3もバケットポリシーで
+# 匿名read公開し、同じく署名なしURLをDBに保存する）。addressing_styleは、MinIOが
+# virtual-hosted-style（バケット名をホスト名の一部にする）に対応しないため既定"path"。
+# 本番S3では"virtual"を環境変数で指定できる。
 AWS_S3_BUCKET = os.environ.get("AWS_S3_BUCKET", "pen-and-palette-media")
+AWS_S3_ADDRESSING_STYLE = os.environ.get("AWS_S3_ADDRESSING_STYLE", "path")
 # 本番のAmazon S3では未設定のままにし、boto3のデフォルトエンドポイントを使わせる。
 # ローカル開発は.envでMinIOのURLを指定する
 AWS_S3_ENDPOINT_URL = os.environ.get("AWS_S3_ENDPOINT_URL") or None
@@ -226,11 +301,44 @@ STORAGES = {
             "access_key": AWS_ACCESS_KEY_ID,
             "secret_key": AWS_SECRET_ACCESS_KEY,
             "region_name": AWS_S3_REGION_NAME,
-            "addressing_style": "path",
+            "addressing_style": AWS_S3_ADDRESSING_STYLE,
             "querystring_auth": False,
             "file_overwrite": False,
-            "default_acl": None,  # MinIOはACL未対応。読み取り公開はminio-init側で設定済み
+            # MinIO/本番バケットともACLは使わず、匿名read公開はバケットポリシー側で設定する
+            "default_acl": None,
         },
     },
-    "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+    # /admin の静的ファイルを WhiteNoise で圧縮・キャッシュ付き配信する
+    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
 }
+
+# ロギング。LOG_FORMAT=json のとき CloudWatch Logs 向けに1行JSONで出力する。
+# それ以外は Django のデフォルト設定（LOGGING未指定）に任せる。
+if os.environ.get("LOG_FORMAT") == "json":
+    LOGGING = {
+        "version": 1,
+        "disable_existing_loggers": False,
+        "formatters": {
+            "json": {
+                "format": (
+                    '{"level": "%(levelname)s", "logger": "%(name)s", '
+                    '"time": "%(asctime)s", "message": "%(message)s"}'
+                ),
+            },
+        },
+        "handlers": {
+            "console": {
+                "class": "logging.StreamHandler",
+                "formatter": "json",
+            },
+        },
+        "root": {"handlers": ["console"], "level": "INFO"},
+        "loggers": {
+            "django": {"handlers": ["console"], "level": "INFO", "propagate": False},
+            "gunicorn.error": {
+                "handlers": ["console"],
+                "level": "INFO",
+                "propagate": False,
+            },
+        },
+    }
