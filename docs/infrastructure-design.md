@@ -9,6 +9,9 @@
 **1.0 / 2026-08-28**
 初版作成。RaiseTechSNS の構成を踏襲しつつ、(a) 画像用 S3 バケットも非公開にして CloudFront の `/media/*` ビヘイビア経由（OAC）でのみ配信、(b) 画像の S3 認証は静的 IAM アクセスキーではなく ECS タスクロール（django-storages / boto3 の既定認証チェーンが自動的に拾う）、の 2 点を RaiseTechSNS から変更した。`terraform validate` とローカルでのイメージビルド・起動確認まで実施。実際の `terraform apply` は未実施。
 
+**1.1 / 2026-08-28**
+イメージのビルド〜ECS 再デプロイ〜フロント配信〜CloudFront invalidation を GitHub Actions（`.github/workflows/deploy.yml`、`workflow_dispatch` = 手動実行のみ）にまとめた。AWS 認証は OIDC で、`terraform/oidc.tf` が OIDC プロバイダとデプロイ用ロールを作る。7.7 節を追加。
+
 ## 1. 方針
 
 - 本番環境の構築において、EC2 インスタンスを直接作成・管理しない
@@ -119,7 +122,7 @@ Vue Router は history モード（`createWebHistory`）のため、`/timeline` 
 - **ALB の保護は CloudFront のオリジンフェイシング IP レンジ（AWS 管理プレフィックスリスト）のみ**：「自分のディストリビューション限定」ではなく「AWS 上の全 CloudFront エッジ」からの到達を許す。恒久対応は CloudFront のカスタムヘッダー共有シークレット + ALB リスナールールでの検証
 - **Terraform state をローカル保存**：DB パスワード等が平文で `terraform/` 配下の tfstate に残る（`.gitignore` で誤コミットは防止済み）。恒久運用するなら S3 リモートバックエンド + 暗号化
 - **HSTS 無効**：`*.cloudfront.net` は他プロジェクトと共有するドメインのため、`SECURE_HSTS_SECONDS` は既定 0。独自ドメイン導入時に有効化を検討
-- **CI/CD 未整備**：ECR への push・ECS へのデプロイは下記 Runbook の手動手順。自動化は未着手（RaiseTechSNS 自身も未確定）
+- **CI/CD は手動トリガーのみ**：ECR への push・ECS へのデプロイは `.github/workflows/deploy.yml`（`workflow_dispatch`、7.7 参照）にまとめてあるが、main への push では自動実行しない（検証後 `terraform destroy` する運用のため）。恒久運用するなら push トリガー・環境保護ルール・ロールバック手順の整備が要る
 
 ## 7. デプロイ手順（Runbook）
 
@@ -212,3 +215,31 @@ aws ecs execute-command --cluster "$(terraform -chdir=terraform output -raw ecs_
 ```sh
 terraform -chdir=terraform destroy
 ```
+
+## 7.7 GitHub Actions での自動デプロイ
+
+7.2〜7.4 の手動手順は `.github/workflows/deploy.yml`（**手動実行のみ** = `workflow_dispatch`）でまとめて実行できる。イメージのビルド＆push → ECS 強制再デプロイ → フロントの build＆S3 sync → CloudFront invalidation を 1 回で行う。学習用途・検証後 `terraform destroy` する運用に合わせ、main への push では自動実行しない。
+
+AWS 認証は OIDC（GitHub Actions ⇄ AWS を信頼させ、長期アクセスキーを GitHub に置かない）。`terraform/oidc.tf` が OIDC プロバイダとデプロイ用 IAM ロール（ECR push / ECS 更新 / S3 sync / CloudFront invalidation の最小権限）を作る。
+
+### 一度きりの準備
+
+1. `terraform apply` 済みであること（7.1）。ロール ARN を控える：
+
+   ```sh
+   terraform -chdir=terraform output -raw github_deploy_role_arn
+   ```
+
+2. その ARN を GitHub リポジトリの **Variables**（Secrets ではない）に `AWS_DEPLOY_ROLE_ARN` として登録する：
+
+   ```sh
+   gh variable set AWS_DEPLOY_ROLE_ARN --body "<上の ARN>"
+   ```
+
+> アカウントに既に GitHub Actions 用の OIDC プロバイダ（`token.actions.githubusercontent.com`）がある場合は、`terraform apply` が「already exists」で失敗する。その場合は `terraform.tfvars` に `create_github_oidc_provider = false` を設定して既存プロバイダを参照させる（ロールの assume ポリシーは規約どおりの ARN を組み立てる）。
+
+### 実行
+
+GitHub の Actions タブ →「Deploy」→ **Run workflow**（または `gh workflow run deploy.yml`）。terraform state はワークフローから参照できないため、リソース名は `project_name`（`pen-and-palette`）規約から導出し、CloudFront ディストリビューション ID はオリジンのバケット名から引いている。
+
+初回のスーパーユーザー作成（7.5）だけはこのワークフローの対象外。ローカルから `aws ecs execute-command` で行う。
