@@ -281,9 +281,7 @@ cd e2e && npm run test:scenarios
 - **Lint／テスト／ビルド／E2E（scenarios）は PR ごとに GitHub Actions（[.github/workflows/ci.yml](.github/workflows/ci.yml)）で自動実行**しています。
 - E2E の performance トラック（`e2e/performance`、ブラウザ実測タイミング）と、k6 負荷試験・Lighthouse 監査（`perf-tests/`）は手動実行です（CI には含めない）。
 
-## 工夫した点
-
-### デプロイ実績
+## デプロイ実績
 
 2026-08-28、`terraform/` のコードから AWS 本番環境を構築し、アプリをデプロイして全機能の疎通を確認しました。
 
@@ -295,16 +293,6 @@ cd e2e && npm run test:scenarios
 | 撤去 | 確認後に `terraform destroy` で全 50 リソースを削除（学習用途・コスト回避のため） |
 
 `terraform apply` → デプロイ → 確認 → `terraform destroy` の一連は再現可能な状態でコード化しています（手順は[インフラ構成書](docs/infrastructure-design.md) 7章の Runbook）。
-
-### 設計・実装で意識したこと
-
-- **Cookie 認証の同一オリジン化**：フロント・API・画像を CloudFront の1ドメイン配下にまとめ、`SameSite`/`Secure` Cookie がそのまま通るようにした。ローカルではオリジンが分かれるため CORS を明示設定。
-- **N+1 の回避**：一覧の集計値（いいね数・フォロー数・`liked_by_me` 等）はループでの個別クエリではなく `annotate()`（`Count`・`Exists`）で1クエリに集約。
-- **カーソルベースのページネーション**：タイムラインは offset ではなく `id` 基準のカーソル（`before_id`/`after_id`）。無限スクロール中に新着投稿が増えても重複・欠落しない。
-- **画像 S3 の権限最小化**：静的 IAM アクセスキーを使わず、ECS タスクロールに S3 権限を付与し boto3 の既定認証チェーンで拾わせる。画像バケットも非公開にし CloudFront OAC 経由（`/media/*`）でのみ配信。
-- **本番設定のハードニング**：`DEBUG=False` 時は `DJANGO_SECRET_KEY` 未設定で起動失敗、セキュア Cookie・プロキシ SSL ヘッダー・HSTS（opt-in）、CORS/CSRF は環境変数から。
-- **CI から長期クレデンシャルを排除**：デプロイは GitHub OIDC で AWS を信頼させ、アクセスキーを GitHub に置かない。
-- **共通化**：見た目が同じ表示要素（アバターアイコン等）は最初から共通コンポーネントに、app 横断の処理（S3 アップロード失敗のログ化等）は `common/` に集約。
 
 ## 今後の予定
 
