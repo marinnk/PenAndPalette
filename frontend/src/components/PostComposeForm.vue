@@ -149,8 +149,8 @@ function onToggleTag(tagId: number) {
       </div>
 
       <div class="form-field">
-        <label
-          >{{ postType === 'novel' ? 'カバー画像' : '画像' }}（{{ imageMaxCount }}枚まで）</label
+        <span class="form-field-caption"
+          >{{ postType === 'novel' ? 'カバー画像' : '画像' }}（{{ imageMaxCount }}枚まで）</span
         >
         <div class="post-compose-images">
           <div v-for="(preview, i) in imagePreviews" :key="preview" class="post-compose-image-slot">
@@ -212,7 +212,7 @@ function onToggleTag(tagId: number) {
       </div>
 
       <div class="form-field">
-        <label>分類タグ（最大{{ MAX_POST_TAGS }}個）</label>
+        <span class="form-field-caption">分類タグ（最大{{ MAX_POST_TAGS }}個）</span>
         <div class="post-compose-tags">
           <button
             v-for="tag in tags"

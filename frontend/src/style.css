@@ -335,7 +335,11 @@ code {
   margin-bottom: 20px;
 }
 
-.form-field label {
+/* 単一の入力欄に対応する <label> と、入力欄の集合（画像グリッド・タグ群など）の
+   見出しに使う <span class="form-field-caption"> を同じ見た目にする。後者は対応する
+   単一コントロールが無いため <label> にはできない（アクセシビリティLintの指摘） */
+.form-field label,
+.form-field-caption {
   display: block;
   margin-bottom: 6px;
   color: var(--text-h);

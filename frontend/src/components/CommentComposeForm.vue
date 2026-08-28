@@ -55,6 +55,7 @@ function onSubmit() {
         maxlength="280"
         rows="2"
         placeholder="コメントを入力"
+        aria-label="コメントを入力"
         data-testid="comment-body"
         @input="emit('update:content', ($event.target as HTMLTextAreaElement).value)"
       ></textarea>

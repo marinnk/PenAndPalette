@@ -54,6 +54,10 @@ function onDeleteClick() {
 </script>
 
 <template>
+  <!-- clickable=true のときだけ role="button" / tabindex="0" / Enter キー操作を付ける
+       クリック可能なカード（goToDetail も !clickable なら早期 return）。静的解析では
+       動的な :role を追えないため、この行のみ no-static-element-interactions を無効化する。 -->
+  <!-- eslint-disable-next-line vuejs-accessibility/no-static-element-interactions -->
   <article
     class="post-card"
     :class="{ 'post-card-static': !clickable }"

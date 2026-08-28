@@ -1,5 +1,6 @@
 import js from '@eslint/js'
 import pluginVue from 'eslint-plugin-vue'
+import pluginVueA11y from 'eslint-plugin-vuejs-accessibility'
 import eslintConfigPrettier from 'eslint-config-prettier'
 import tseslint from 'typescript-eslint'
 
@@ -8,6 +9,8 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
   ...pluginVue.configs['flat/recommended'],
+  // .vue テンプレートのアクセシビリティ（ラベル・alt・キーボード操作など）を検査する
+  ...pluginVueA11y.configs['flat/recommended'],
   {
     files: ['**/*.vue'],
     languageOptions: {
@@ -37,6 +40,12 @@ export default tseslint.config(
     rules: {
       // 単一責務のルールに沿って、コンポーネントを小さく保つことを促す
       'vue/multi-word-component-names': 'off',
+      // 既定（nesting と for の両方を必須）は WCAG が求める以上に厳しい。
+      // for/id による関連付け「または」入れ子のどちらかがあれば良しとする。
+      'vuejs-accessibility/label-has-for': [
+        'error',
+        { required: { some: ['nesting', 'id'] }, allowChildren: false },
+      ],
     },
   },
 )

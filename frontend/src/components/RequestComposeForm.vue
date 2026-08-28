@@ -64,7 +64,7 @@ const emit = defineEmits<{
       </div>
 
       <div class="form-field">
-        <label>参考にしてほしい投稿（任意）</label>
+        <span class="form-field-caption">参考にしてほしい投稿（任意）</span>
 
         <div v-if="selectedPost" class="request-related-post-selected">
           <PostCard :post="selectedPost" :clickable="false" preview />

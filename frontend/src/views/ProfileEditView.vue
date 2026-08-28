@@ -70,7 +70,7 @@ async function handleSave() {
     </p>
     <form v-else @submit.prevent="handleSave">
       <div class="form-field">
-        <label>アイコン画像</label>
+        <span class="form-field-caption">アイコン画像</span>
         <div class="profile-edit-avatar-row">
           <AvatarIcon :src="profile.avatar_url" :size="64" testid="profile-edit-avatar-image" />
           <label
