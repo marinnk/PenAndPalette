@@ -1,7 +1,7 @@
 // F-9 ユーザー検索機能（docs/features/user-search.md、画面 S09）
 
 import { test, expect } from '../support/fixtures'
-import { searchScreen, profileScreen } from '../support/selectors'
+import { searchScreen, profileScreen, header } from '../support/selectors'
 
 test.describe('ユーザー検索', () => {
   test('キーワードで検索すると該当利用者が一覧表示され、結果からプロフィールへ遷移できる', async ({
@@ -15,6 +15,24 @@ test.describe('ユーザー検索', () => {
     const item = searchScreen.resultItem(page, secondUser.id)
     await expect(item).toBeVisible()
     await expect(item).toContainText(secondUser.displayName)
+
+    await item.click()
+    await expect(page).toHaveURL(new RegExp(`/profile/${secondUser.id}$`))
+    await expect(profileScreen.displayName(page)).toHaveText(secondUser.displayName)
+  })
+
+  test('画面共通ヘッダーの検索入力欄に入力すると直下に候補が出て、選ぶとプロフィールへ遷移できる', async ({
+    authedPage: page,
+    secondUser,
+  }) => {
+    await page.goto('/')
+    await header.searchInput(page).fill(secondUser.username)
+
+    // 検索画面へは遷移せず、その場で候補が出る
+    const item = header.searchResultItem(page, secondUser.id)
+    await expect(item).toBeVisible()
+    await expect(item).toContainText(secondUser.displayName)
+    await expect(page).toHaveURL(/\/$/)
 
     await item.click()
     await expect(page).toHaveURL(new RegExp(`/profile/${secondUser.id}$`))
