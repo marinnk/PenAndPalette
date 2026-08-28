@@ -5,73 +5,75 @@ description: Run the on-demand performance tests under perf-tests/ — k6 load t
 
 # パフォーマンステストの実行手順
 
-`perf-tests/`配下のk6シナリオ（バックエンドAPI負荷試験）・Lighthouse監査（フロントエンド画面性能）を実行する手順。姉妹プロジェクト[RaiseTechSNS](../../../../RaiseTechSNS/.claude/skills/perf-test/SKILL.md)と同じ方針を踏襲する。
+`perf-tests/` 配下の k6 シナリオ（バックエンド API 負荷試験）・Lighthouse 監査（フロントエンド画面性能）を
+実行する手順。詳細は [perf-tests/README.md](../../../perf-tests/README.md) を参照。
 
-**このディレクトリ・スキルは現時点ではテンプレート。** `backend/`・`frontend/`の実装セットアップより前の段階では`perf-tests/`ディレクトリ自体が存在しない。実装が進んだら、以下の方針に沿って`perf-tests/README.md`・各シナリオ・シードデータを整備し、このSKILL.mdの具体的なコマンドを実際のものに更新すること。
+**これらは常にオンデマンド実行。** ユーザーから明示的に頼まれたときだけ実行し、lint/test/build の
+一部として自動実行してはならない。
 
-**これらは常にオンデマンド実行。** ユーザーから明示的に頼まれたときだけ実行し、lint/test/buildの一部として自動実行してはならない。
-
-`docs/basic-design.md`の非機能要件は「学習利用を前提とし、大量アクセス・大量データは考慮しない」としているため、ここでの目的は本番並みの負荷への耐性証明ではなく、以下のような設計上の判断が実際にどう振る舞うかを手元で確認できるようにすること。
-
-- タイムライン（`GET /api/posts`）は`id`基準のカーソル方式ページネーション＋30秒間隔ポーリングで新着検知する設計（[基本設計書 6.9〜6.10節](../../../docs/basic-design.md#69-ページネーション方式カーソルベース)）
-- 投稿一覧のいいね数・かきたい数・コメント数は`annotate()`による集計（N+1回避、[基本設計書 6.3節](../../../docs/basic-design.md#63-投稿api)）
-- フォロワー一覧・フォロー中一覧・コメント一覧・リクエスト一覧は意図的に非ページネーション（LIMIT付き全件取得）
+`docs/basic-design.md` の非機能要件は「学習利用を前提とし、大量アクセス・大量データは考慮しない」と
+しているため、目的は本番並みの負荷への耐性証明ではなく、設計判断（カーソルページネーション＋
+30 秒ポーリング、`annotate()` 集計、フォロワー一覧等の意図的な非ページネーション）が実際にどう
+振る舞うかを手元で確認できるようにすること。
 
 ## 0. どのテストを実行するか判断する
 
-ユーザーの依頼から以下を判断する。曖昧な場合はAskUserQuestion等で確認せず、**まずsmokeモードで全シナリオを実行し**、問題なければ結果を見せた上で「loadモードや個別シナリオも実行するか」をユーザーに確認する（負荷をかける実行はいきなり長時間・広範囲に行わない）。
+ユーザーの依頼から以下を判断する。曖昧な場合は AskUserQuestion 等で確認せず、**まず smoke モードで
+全シナリオを実行し**、問題なければ結果を見せた上で「load モードや個別シナリオも実行するか」を確認する
+（負荷をかける実行はいきなり長時間・広範囲に行わない）。
 
 - 対象トラック：バックエンド（k6）／フロントエンド（Lighthouse）／両方
-- k6のモード：`smoke`（既定・数秒で終わる動作確認）／`load`（20VUまでランプアップし数分程度）
+- k6 のモード：`smoke`（既定・数秒）／`load`（20VU までランプアップし数分）
 - 特定のシナリオ名の指定があれば、それだけを実行する
 
 ## 1. 前提環境を起動する
 
-[run-app skill](../run-app/SKILL.md)の手順でbackend（8000）・DB（3306）を起動する。Lighthouseトラックも実行する場合はfrontend（5173）も起動する。k6のみなら不要。
+[run-app skill](../run-app/SKILL.md) の手順で backend（8000）・DB（3306）を起動する。Lighthouse トラックも
+実行する場合は frontend（5173）も起動する。k6 のみなら frontend は不要。
 
 ```sh
 docker compose up -d db
-cd backend
-source .venv/bin/activate
-python manage.py runserver 8000   # バックグラウンドで起動し、以降のコマンドは別途実行する
+cd backend && source .venv/bin/activate
+python manage.py runserver 8000   # 別ターミナルで起動したまま以降を実行する
 ```
 
 起動確認：
 
 ```sh
-curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8000/api/auth/me
+curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8000/api/health   # 200
 ```
 
-## 2. シードデータを投入する（未投入の場合）
-
-k6シナリオ・Lighthouseはいずれもログイン可能なダミー利用者の存在を前提にする想定。未投入だとログインに失敗しシナリオが即座にスキップ/失敗するため、投入済みか確認し、無ければ投入する（シード方法は`perf-tests/seed/`整備時に確定する）。
-
-## 3. k6（バックエンドAPI負荷試験）を実行する
-
-`k6`コマンドが無ければ`brew install k6`でインストールする（`which k6`で確認）。想定するシナリオ：
-
-- `timeline-read` — `GET /api/posts`（タイムライン。カーソルページネーション＋ポーリング想定、最優先）
-- `auth-login` — `POST /api/auth/login`（パスワードハッシュ検証コストの影響確認）
-- `post-create` — `POST /api/posts`（投稿作成、テキストのみ）
-- `likes-wants-comments` — いいね/かきたいの登録/解除・コメント作成（高頻度な操作系）
-- `profile-read` — `GET /api/users/{userId}`（フォロー数等の集計）
-- `followers-list` — フォロワー一覧（意図的な非ページネーションの弱点確認）
-- `requests-list` — リクエスト一覧（同上）
+## 2. シードデータを投入する（未投入・または書き込みシナリオ実行後）
 
 ```sh
-# まずは全シナリオをsmokeモードで動作確認
-for s in timeline-read auth-login post-create likes-wants-comments profile-read followers-list requests-list; do
+cd backend && source .venv/bin/activate
+python manage.py seed_perf_data     # 500 ユーザー / 1 万投稿。冪等（perf_user_% を消して再投入）
+```
+
+未投入だとログインに失敗し全シナリオがスキップ/失敗する。詳細は
+[perf-tests/seed/README.md](../../../perf-tests/seed/README.md)。
+
+## 3. k6（バックエンド API 負荷試験）
+
+`k6` が無ければ `brew install k6`（`which k6` で確認）。シナリオ一覧は
+[perf-tests/README.md](../../../perf-tests/README.md#バックエンド-api-負荷試験k6) 参照
+（timeline-read / auth-login / post-create / reactions / profile-read / followers-list / requests-list）。
+
+```sh
+# まず全シナリオを smoke で動作確認
+for s in timeline-read auth-login post-create reactions profile-read followers-list requests-list; do
   echo "=== $s ==="
   k6 run -e MODE=smoke "perf-tests/k6/scenarios/$s.ts"
 done
 
-# loadモード（HTMLレポートも自動生成される想定）
+# load モード（HTML レポートが results/k6/ に出る。1 シナリオ約 3 分）
 ./perf-tests/k6/run.sh timeline-read
 ```
 
-結果は標準出力の`checks`（成功率100%が期待値）・`http_req_duration`（p95）・`http_req_failed`を見る。`thresholds`未達（`✗`表示）があれば、シナリオ名・エンドポイント・実測値をユーザーに報告する。
+結果は標準出力の `checks`（成功率 100% が期待値）・`http_req_duration`（p95）・`http_req_failed` を見る。
+`thresholds` 未達（`✗` 表示）があれば、シナリオ名・エンドポイント・実測値をユーザーに報告する。
 
-## 4. Lighthouse（フロントエンド画面性能監査）を実行する
+## 4. Lighthouse（フロントエンド画面性能監査）
 
 frontend（5173）が起動していることを確認してから実行する。
 
@@ -79,34 +81,40 @@ frontend（5173）が起動していることを確認してから実行する�
 ./perf-tests/frontend/run.sh
 ```
 
-結果は`perf-tests/results/lighthouse/<name>-<timestamp>.report.html`（ブラウザで開ける）と`.report.json`に出力される想定。JSONの`categories.performance.score`（0〜1）・`audits.largest-contentful-paint`等の主要指標をユーザーに報告する。
+初回は `perf-tests/frontend/` で `npm install` が走る（lighthouse・puppeteer-core）。
+結果は `perf-tests/results/lighthouse/timeline-<日時>.report.{html,json}` に出力される。
+JSON の `categories.performance.score`（0〜1）・`audits.largest-contentful-paint` 等をユーザーに報告する。
 
-`npm run dev`（Viteの開発サーバー）に対する数値は未バンドル・未最適化のため本番ビルドより大幅に悪く出る。本番相当の数値が要る場合は`cd frontend && npm run build && npm run preview`を起動してから実行する。
+`npm run dev`（Vite 開発サーバー）に対する数値は未バンドル・未最適化のため本番ビルドより大幅に悪く出る
+（FCP 10 秒超なども普通）。本番相当の数値が要る場合は frontend を `npm run build && npm run preview` で
+起動し、`FRONTEND_URL=http://localhost:4173 ./perf-tests/frontend/run.sh` のように実行する。
 
 ## 5. 結果を報告する
 
-- k6：シナリオごとにcheck成功率・p95応答時間・エラー率。thresholds未達があれば強調する。loadモード実行時はHTMLレポートのパスも伝える
-- Lighthouse：performanceスコア・主要Core Web Vitals（LCP・CLS・TBT）。レポートファイルのパスを伝える
-- 非機能要件（[基本設計書 5章](../../../docs/basic-design.md#5-非機能要件)）は「学習用途・大量アクセス非考慮」前提のため、数値は厳密なSLA判定ではなく「劣化に気づくための目安」として扱う
+- k6：シナリオごとに check 成功率・p95 応答時間・エラー率。thresholds 未達があれば強調。
+  load モード実行時は HTML レポートのパスも伝える
+- Lighthouse：performance スコア・主要 Core Web Vitals（LCP・CLS・TBT）。レポートファイルのパス
+- 非機能要件（[基本設計書 5章](../../../docs/basic-design.md#5-非機能要件)）は「学習用途・大量アクセス非考慮」
+  前提のため、数値は厳密な SLA 判定ではなく「劣化に気づくための目安」として扱う
 
 ## 6. 後片付け
 
-### DBに残ったテストデータのリセット
+### DB に残ったテストデータのリセット
 
-投稿・コメント・いいね/かきたいを作成するシナリオを実行すると、ダミーデータがDBに残ったままになる。放置すると、後で普通に手動確認したときにダミー投稿がタイムラインに混ざったり、[quality-check skill](../quality-check/SKILL.md)が警告する「DBの蓄積データによる見せかけの失敗」を自ら引き起こしたりする。
+`post-create` / `reactions` を実行するとダミー投稿・コメントが DB に残る。放置すると手動確認時に
+タイムラインへ混ざったり、[quality-check skill](../quality-check/SKILL.md) が警告する「DB の蓄積データによる
+見せかけの失敗」を招く。
 
-そのため、データを書き換えるシナリオを実行した後は、**ユーザーに確認した上で**シードのリセットを提案する（DBを直接操作する破壊的操作のため、無断では実行しない）。
-
-`timeline-read`・`auth-login`・`profile-read`・`followers-list`・`requests-list`のみ実行した場合はデータを書き換えないため、このリセットは不要。
+書き込みシナリオを実行した後は、**ユーザーに確認した上で** `python manage.py seed_perf_data` の再実行を
+提案する（DB を書き換える操作のため無断では実行しない）。`timeline-read` / `auth-login` / `profile-read` /
+`followers-list` / `requests-list` のみなら不要。
 
 ### サーバーの停止
 
-検証のためだけに起動したサーバーは、作業終了時に停止する（[run-app skill](../run-app/SKILL.md)参照）。
+検証のためだけに起動したサーバーは作業終了時に停止する（[run-app skill](../run-app/SKILL.md) 参照）。
+ただしユーザーが引き続き使う様子なら勝手に止めずに確認する。
 
 ```sh
 lsof -ti:8000 -sTCP:LISTEN | xargs -r kill
 lsof -ti:5173 -sTCP:LISTEN | xargs -r kill
-docker compose down
 ```
-
-ただし、ユーザーが引き続き動作確認等で使う様子なら、勝手に止めずに確認する。

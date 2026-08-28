@@ -1,0 +1,11 @@
+{
+  "name": "perf-tests-frontend",
+  "private": true,
+  "type": "module",
+  "description": "Lighthouse による認証後タイムライン画面の性能監査（audit.mjs）",
+  "dependencies": {
+    "chrome-launcher": "^1.2.1",
+    "lighthouse": "^13.4.1",
+    "puppeteer-core": "^25.9.0"
+  }
+}
