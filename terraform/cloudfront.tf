@@ -6,6 +6,26 @@ resource "aws_cloudfront_origin_access_control" "s3" {
   signing_protocol                  = "sigv4"
 }
 
+# Vue Router は history モード（createWebHistory）のため、/timeline のような拡張子なしパスを
+# リロード・直リンクすると S3 に該当オブジェクトが無く 404 になる。拡張子を持たないリクエストを
+# /index.html に書き換えて SPA に処理させる。デフォルト（フロント）ビヘイビアにのみ紐づけるため、
+# /api/* ・ /media/* は影響を受けない（それらの 404 はそのまま返る）。
+resource "aws_cloudfront_function" "spa_rewrite" {
+  name    = "${var.project_name}-spa-rewrite"
+  runtime = "cloudfront-js-2.0"
+  publish = true
+  code    = <<-JS
+    function handler(event) {
+      var request = event.request;
+      var uri = request.uri;
+      if (uri !== '/' && uri.indexOf('.') === -1) {
+        request.uri = '/index.html';
+      }
+      return request;
+    }
+  JS
+}
+
 # AWS管理のキャッシュ・オリジンリクエストポリシー（自前定義せず既存のものを参照する）
 data "aws_cloudfront_cache_policy" "caching_optimized" {
   name = "Managed-CachingOptimized"
@@ -58,6 +78,11 @@ resource "aws_cloudfront_distribution" "main" {
     target_origin_id       = "s3-frontend"
     viewer_protocol_policy = "redirect-to-https"
     cache_policy_id        = data.aws_cloudfront_cache_policy.caching_optimized.id
+
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = aws_cloudfront_function.spa_rewrite.arn
+    }
   }
 
   # /media/* → 画像用S3（OAC経由）。ファイル名はUUIDで不変のため積極的にキャッシュする。

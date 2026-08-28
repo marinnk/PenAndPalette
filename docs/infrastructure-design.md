@@ -94,6 +94,8 @@ graph TD
 
 ブラウザから見ると単一オリジンになるため、認証方式・Cookie 設定を変えずに運用できる。
 
+Vue Router は history モード（`createWebHistory`）のため、`/timeline` のような拡張子なしパスをリロード・直リンクすると S3 に該当オブジェクトが無く 404 になる。デフォルトビヘイビアにのみ CloudFront Function（`spa_rewrite`）を紐づけ、拡張子を持たないリクエストを `/index.html` に書き換えて SPA に処理させる。`/api/*`・`/media/*` は別ビヘイビアのため影響を受けず、それらの 404 はそのまま返る。
+
 ### バックエンド側の対応（`backend/config/settings.py`、#44 で実装）
 
 - **CORS**：ブラウザは同一オリジンでも状態変化リクエスト（POST/PUT/DELETE）で `Origin` ヘッダーを送る。CloudFront ドメインは apply 後まで確定しないため、完全一致ではなく `CORS_ALLOWED_ORIGIN_REGEXES=^https://.*\.cloudfront\.net$` で許可する（RaiseTechSNS が `setAllowedOriginPatterns` で行った対応と同じ）
