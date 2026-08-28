@@ -49,10 +49,16 @@ function makePost(id: number, overrides: Partial<Post> = {}): Post {
 // /api/requests/receivedを呼ぶため、単純な呼び出し順ベースのmockResolvedValueOnceだと
 // タイムライン本体のGET /api/postsの応答と混線してしまう。URLで振り分ける
 // mockImplementationにし、/api/postsへの複数回の呼び出しには順にqueueの値を返す
-function mockGet(postsQueue: PostListResponse[]) {
+const DEFAULT_TAGS = [
+  { id: 3, name: 'ファンタジー' },
+  { id: 4, name: 'SF' },
+]
+
+function mockGet(postsQueue: PostListResponse[], tags = DEFAULT_TAGS) {
   let call = 0
   vi.mocked(apiClient.get).mockImplementation((url: string) => {
     if (url === '/api/requests/received') return Promise.resolve({ data: [] })
+    if (url === '/api/tags') return Promise.resolve({ data: tags })
     if (url === '/api/posts') {
       const data = postsQueue[Math.min(call, postsQueue.length - 1)]
       call += 1
@@ -62,7 +68,7 @@ function mockGet(postsQueue: PostListResponse[]) {
   })
 }
 
-function renderTimelineView() {
+async function renderTimelineView(initialLocation = '/') {
   const pinia = createPinia()
   setActivePinia(pinia)
   const auth = useAuthStore()
@@ -78,6 +84,8 @@ function renderTimelineView() {
       { path: '/search', name: 'user-search', component: SearchStub },
     ],
   })
+  await router.push(initialLocation)
+  await router.isReady()
   const result = render(TimelineView, { global: { plugins: [pinia, router] } })
   return { ...result, router }
 }
@@ -96,7 +104,7 @@ afterEach(() => {
 describe('TimelineView', () => {
   it('マウント時にGET /api/posts?scope=all&post_type=illustrationで一覧取得する', async () => {
     mockGet([{ results: [makePost(1)], has_more: false }])
-    const { router } = renderTimelineView()
+    const { router } = await renderTimelineView()
     await router.isReady()
 
     await waitFor(() => {
@@ -123,7 +131,7 @@ describe('TimelineView', () => {
         has_more: false,
       },
     ])
-    const { router } = renderTimelineView()
+    const { router } = await renderTimelineView()
     await router.isReady()
 
     await waitFor(() => {
@@ -136,7 +144,7 @@ describe('TimelineView', () => {
       { results: [], has_more: false },
       { results: [], has_more: false },
     ])
-    const { router } = renderTimelineView()
+    const { router } = await renderTimelineView()
     await router.isReady()
 
     await waitFor(() => {
@@ -157,7 +165,7 @@ describe('TimelineView', () => {
       { results: [makePost(1)], has_more: false },
       { results: [makePost(2, { post_type: 'novel', title: '小説タイトル' })], has_more: false },
     ])
-    const { router } = renderTimelineView()
+    const { router } = await renderTimelineView()
     await router.isReady()
     await waitFor(() => expect(screen.getByTestId('post-card-1')).toBeInTheDocument())
 
@@ -177,7 +185,7 @@ describe('TimelineView', () => {
       { results: [makePost(1)], has_more: false },
       { results: [], has_more: false },
     ])
-    const { router } = renderTimelineView()
+    const { router } = await renderTimelineView()
     await router.isReady()
     await waitFor(() => expect(screen.getByTestId('post-card-1')).toBeInTheDocument())
 
@@ -202,7 +210,7 @@ describe('TimelineView', () => {
       { results: [makePost(1)], has_more: false },
       { results: [makePost(2)], has_more: false },
     ])
-    const { router } = renderTimelineView()
+    const { router } = await renderTimelineView()
     await router.isReady()
     await waitFor(() => expect(screen.getByText('投稿1')).toBeInTheDocument())
 
@@ -222,7 +230,7 @@ describe('TimelineView', () => {
 
   it('自分の投稿の削除ボタン→確認後に一覧からその場で取り除かれる', async () => {
     mockGet([{ results: [makePost(1), makePost(2)], has_more: false }])
-    const { router } = renderTimelineView()
+    const { router } = await renderTimelineView()
     await router.isReady()
     await waitFor(() => expect(screen.getByText('投稿1')).toBeInTheDocument())
 
@@ -238,7 +246,7 @@ describe('TimelineView', () => {
 
   it('削除に失敗した場合はエラーメッセージを表示し一覧はそのまま', async () => {
     mockGet([{ results: [makePost(1)], has_more: false }])
-    const { router } = renderTimelineView()
+    const { router } = await renderTimelineView()
     await router.isReady()
     await waitFor(() => expect(screen.getByText('投稿1')).toBeInTheDocument())
 
@@ -251,9 +259,91 @@ describe('TimelineView', () => {
     })
   })
 
+  it('「絞り込み」を開いてタグを選ぶとtag_id付きで再取得しURLにも反映する', async () => {
+    mockGet([
+      { results: [makePost(1)], has_more: false },
+      { results: [makePost(2, { tags: [{ id: 3, name: 'ファンタジー' }] })], has_more: false },
+    ])
+    const { router } = await renderTimelineView()
+    await router.isReady()
+    await waitFor(() => expect(screen.getByTestId('post-card-1')).toBeInTheDocument())
+
+    await fireEvent.click(screen.getByTestId('filter-toggle'))
+    await fireEvent.click(screen.getByTestId('filter-tag-3'))
+
+    await waitFor(() => {
+      expect(apiClient.get).toHaveBeenLastCalledWith('/api/posts', {
+        params: { scope: 'all', post_type: 'illustration', tag_id: 3, limit: 20 },
+      })
+      expect(router.currentRoute.value.query.tag).toBe('3')
+      expect(screen.queryByTestId('post-card-1')).not.toBeInTheDocument()
+      expect(screen.getByTestId('post-card-2')).toBeInTheDocument()
+    })
+
+    // 選択中のタグをもう一度押すと解除され、絞り込みなしに戻る
+    await fireEvent.click(screen.getByTestId('filter-tag-3'))
+
+    await waitFor(() => {
+      expect(apiClient.get).toHaveBeenLastCalledWith('/api/posts', {
+        params: { scope: 'all', post_type: 'illustration', limit: 20 },
+      })
+      expect(router.currentRoute.value.query.tag).toBeUndefined()
+    })
+  })
+
+  it('?tag=<id> 付きで開くと最初からそのタグで絞り込んで取得する', async () => {
+    mockGet([{ results: [makePost(9, { tags: [{ id: 4, name: 'SF' }] })], has_more: false }])
+    const { router } = await renderTimelineView('/?tag=4')
+    await router.isReady()
+
+    await waitFor(() => {
+      expect(apiClient.get).toHaveBeenCalledWith('/api/posts', {
+        params: { scope: 'all', post_type: 'illustration', tag_id: 4, limit: 20 },
+      })
+    })
+  })
+
+  it('タグ絞り込み中の空状態メッセージにタグ名が含まれる', async () => {
+    mockGet([
+      { results: [makePost(1)], has_more: false },
+      { results: [], has_more: false },
+    ])
+    const { router } = await renderTimelineView()
+    await router.isReady()
+    await waitFor(() => expect(screen.getByTestId('post-card-1')).toBeInTheDocument())
+
+    await fireEvent.click(screen.getByTestId('filter-toggle'))
+    await fireEvent.click(screen.getByTestId('filter-tag-3'))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('timeline-empty')).toHaveTextContent(
+        '#ファンタジーのイラストの投稿がまだありません。',
+      )
+    })
+  })
+
+  it('投稿カードのタグをクリックするとそのタグで絞り込まれる', async () => {
+    mockGet([
+      { results: [makePost(1, { tags: [{ id: 3, name: 'ファンタジー' }] })], has_more: false },
+      { results: [makePost(1, { tags: [{ id: 3, name: 'ファンタジー' }] })], has_more: false },
+    ])
+    const { router } = await renderTimelineView()
+    await router.isReady()
+    await waitFor(() => expect(screen.getByTestId('post-tag-3')).toBeInTheDocument())
+
+    await fireEvent.click(screen.getByTestId('post-tag-3'))
+
+    await waitFor(() => {
+      expect(router.currentRoute.value.query.tag).toBe('3')
+      expect(apiClient.get).toHaveBeenLastCalledWith('/api/posts', {
+        params: { scope: 'all', post_type: 'illustration', tag_id: 3, limit: 20 },
+      })
+    })
+  })
+
   it('「投稿する」ボタンから投稿作成画面へ遷移する', async () => {
     mockGet([{ results: [], has_more: false }])
-    const { router } = renderTimelineView()
+    const { router } = await renderTimelineView()
     await router.isReady()
     await waitFor(() => expect(screen.getByTestId('timeline-empty')).toBeInTheDocument())
 

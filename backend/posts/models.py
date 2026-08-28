@@ -34,6 +34,7 @@ class PostManager(models.Manager.from_queryset(PostQuerySet)):
         scope=None,
         user_id=None,
         post_type=None,
+        tag_id=None,
         before_id=None,
         after_id=None,
         limit=20,
@@ -55,6 +56,10 @@ class PostManager(models.Manager.from_queryset(PostQuerySet)):
         # （基本設計書6.3章：「全体／フォロー中」×「イラスト／小説」は自由に組み合わせられる）
         if post_type:
             qs = qs.filter(post_type=post_type)
+        # tag_idもscope・post_typeと独立した軸。tag_idは単一指定なので中間テーブルの
+        # JOINで行が重複することはなく、distinct()は不要
+        if tag_id:
+            qs = qs.filter(tags__id=tag_id)
         if before_id:
             qs = qs.filter(id__lt=before_id)
         if after_id is not None:

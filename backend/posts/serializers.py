@@ -413,6 +413,9 @@ class PostListQuerySerializer(serializers.Serializer):
     # post_type：全体／フォロー中（scope）とは独立した軸のため、相互排他チェックは設けない
     # （基本設計書6.3章：scope=following&post_type=novel のように自由に組み合わせられる）
     post_type = serializers.ChoiceField(choices=Post.PostType.choices, required=False)
+    # tag_id：分類タグによる絞り込み。scope・post_typeと同じく独立した軸で、自由に組み合わせられる
+    # （基本設計書6.3章）。存在しないidを渡した場合は該当0件として扱う（400にはしない）
+    tag_id = serializers.IntegerField(required=False, min_value=1)
 
     def validate(self, attrs):
         if attrs.get("before_id") is not None and attrs.get("after_id") is not None:
