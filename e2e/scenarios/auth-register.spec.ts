@@ -3,7 +3,7 @@
 import { test, expect } from '../support/fixtures'
 import { registerUser } from '../support/api'
 import { E2E_PASSWORD, emailFor, randomE2eUsername } from '../support/testUser'
-import { loginScreen, registerScreen, timeline, header } from '../support/selectors'
+import { loginScreen, registerScreen, timeline, header, profileScreen } from '../support/selectors'
 
 test.describe('会員登録', () => {
   test('ユーザー名・メールアドレス・パスワードを入力して登録すると、タイムライン画面に遷移する', async ({
@@ -23,8 +23,10 @@ test.describe('会員登録', () => {
 
     await expect(page).toHaveURL(new RegExp('/$'))
     await expect(timeline.composeButton(page)).toBeVisible()
-    // 表示名の初期値はユーザー名（RegisterSerializer.create）。ヘッダーに出る。
-    await expect(header.profileLink(page)).toContainText(username)
+    // ヘッダーのアイコンから自分のプロフィールを開くと、表示名（初期値はユーザー名。
+    // RegisterSerializer.create）が出る＝そのユーザーとしてログインできている
+    await header.profileLink(page).click()
+    await expect(profileScreen.displayName(page)).toHaveText(username)
   })
 
   test('登録済みのメールアドレスで登録しようとすると、エラーが表示され画面遷移しない', async ({
