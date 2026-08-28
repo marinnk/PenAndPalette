@@ -63,6 +63,13 @@ describe('AppHeader', () => {
     })
   }
 
+  it('検索実行ボタンは虫眼鏡アイコンのみで、文字ラベルは持たない', async () => {
+    renderAppHeader()
+    const button = screen.getByTestId('header-search-submit')
+    expect(button).not.toHaveTextContent('検索')
+    expect(button).toHaveAttribute('aria-label', '検索')
+  })
+
   it('検索入力欄で実行すると入力欄の直下に候補が一覧表示され、選ぶとプロフィールへ遷移する', async () => {
     mockUserSearch([{ id: 2, display_name: '次郎' }])
     const { router } = renderAppHeader()

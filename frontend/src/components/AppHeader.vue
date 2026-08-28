@@ -61,53 +61,61 @@ async function handleLogout() {
 <template>
   <header class="app-header">
     <RouterLink :to="{ name: 'timeline' }" class="app-header-title">PenAndPalette</RouterLink>
-    <nav class="app-header-nav">
-      <div v-if="auth.currentUser" ref="searchEl" class="app-header-search">
-        <form role="search" @submit.prevent="runSearch">
-          <input
-            v-model="searchKeyword"
-            type="search"
-            placeholder="利用者を検索"
-            aria-label="利用者を検索"
-            data-testid="header-search-input"
-          />
-          <button type="submit" data-testid="header-search-submit">検索</button>
-        </form>
-        <div
-          v-if="showSearchResults"
-          class="app-header-search-dropdown"
-          data-testid="header-search-dropdown"
-        >
-          <p v-if="searchLoading" class="app-header-search-status" data-testid="header-search-loading">
-            検索中...
-          </p>
-          <p
-            v-else-if="searchError"
-            class="app-header-search-status field-error"
-            data-testid="header-search-error"
-          >
-            検索に失敗しました。
-          </p>
-          <p
-            v-else-if="searchHasSearched && searchUsers.length === 0"
-            class="app-header-search-status"
-            data-testid="header-search-empty"
-          >
-            該当する利用者がいません。
-          </p>
-          <RouterLink
-            v-for="user in searchUsers"
-            :key="user.id"
-            :to="{ name: 'profile', params: { id: user.id } }"
-            class="app-header-search-item"
-            :data-testid="`header-search-item-${user.id}`"
-          >
-            <AvatarIcon :src="user.avatar_url" :size="24" />
-            {{ user.display_name }}
-          </RouterLink>
-        </div>
-      </div>
 
+    <div v-if="auth.currentUser" ref="searchEl" class="app-header-search">
+      <form role="search" @submit.prevent="runSearch">
+        <button
+          type="submit"
+          class="app-header-search-icon"
+          aria-label="検索"
+          data-testid="header-search-submit"
+        >
+          🔍
+        </button>
+        <input
+          v-model="searchKeyword"
+          type="search"
+          placeholder="利用者を検索"
+          aria-label="利用者を検索"
+          data-testid="header-search-input"
+        />
+      </form>
+      <div
+        v-if="showSearchResults"
+        class="app-header-search-dropdown"
+        data-testid="header-search-dropdown"
+      >
+        <p v-if="searchLoading" class="app-header-search-status" data-testid="header-search-loading">
+          検索中...
+        </p>
+        <p
+          v-else-if="searchError"
+          class="app-header-search-status field-error"
+          data-testid="header-search-error"
+        >
+          検索に失敗しました。
+        </p>
+        <p
+          v-else-if="searchHasSearched && searchUsers.length === 0"
+          class="app-header-search-status"
+          data-testid="header-search-empty"
+        >
+          該当する利用者がいません。
+        </p>
+        <RouterLink
+          v-for="user in searchUsers"
+          :key="user.id"
+          :to="{ name: 'profile', params: { id: user.id } }"
+          class="app-header-search-item"
+          :data-testid="`header-search-item-${user.id}`"
+        >
+          <AvatarIcon :src="user.avatar_url" :size="24" />
+          {{ user.display_name }}
+        </RouterLink>
+      </div>
+    </div>
+
+    <nav class="app-header-nav">
       <RouterLink
         v-if="auth.currentUser"
         :to="{ name: 'profile', params: { id: auth.currentUser.id } }"
