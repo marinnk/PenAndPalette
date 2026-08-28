@@ -134,3 +134,29 @@ def test_json_log_format_configures_single_line_json_logging():
 def test_s3_addressing_style_is_configurable(style):
     result = load_settings({**PROD_ENV, "AWS_S3_ADDRESSING_STYLE": style}, ["STORAGES"])
     assert result["STORAGES"]["default"]["OPTIONS"]["addressing_style"] == style
+
+
+def test_s3_serves_images_through_cloudfront_when_configured():
+    # 基本設計書 7章: 本番の画像用バケットは非公開で、CloudFront の /media/* 経由で配信する
+    result = load_settings(
+        {
+            **PROD_ENV,
+            "AWS_S3_CUSTOM_DOMAIN": "d123.cloudfront.net",
+            "AWS_S3_LOCATION": "media",
+        },
+        ["STORAGES"],
+    )
+    opts = result["STORAGES"]["default"]["OPTIONS"]
+    assert opts["custom_domain"] == "d123.cloudfront.net"
+    assert opts["location"] == "media"
+
+
+def test_s3_credentials_fall_back_to_boto3_default_chain_when_unset():
+    # 本番は ECS タスクロールを使うため、キーは明示しない（None のとき boto3 の既定チェーン）
+    result = load_settings(
+        {**PROD_ENV, "AWS_ACCESS_KEY_ID": "", "AWS_SECRET_ACCESS_KEY": ""},
+        ["STORAGES"],
+    )
+    opts = result["STORAGES"]["default"]["OPTIONS"]
+    assert opts["access_key"] is None
+    assert opts["secret_key"] is None

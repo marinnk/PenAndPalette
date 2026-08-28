@@ -12,6 +12,7 @@
 - [機能一覧](docs/features/index.md)：機能ごとの詳しい仕様
 - [画面設計](docs/screen-design.md)：画面一覧・画面遷移・ワイヤーフレーム
 - [基本設計書](docs/basic-design.md)：技術スタック・データベース設計（ER図）など、どう作るか
+- [インフラ構成書](docs/infrastructure-design.md)：本番AWS構成（Terraform）・デプロイ手順
 
 ## 使用技術
 
@@ -19,6 +20,7 @@
 - フロントエンド：Vue.js（TypeScript）、Lint/テストはESLint+Prettier・Vitest
 - データベース：MySQL
 - 画像ストレージ：Amazon S3（ローカル開発ではMinIOで代替）
+- 本番インフラ：AWS（S3 + CloudFront / ECS Fargate / RDS for MySQL / Secrets Manager）を Terraform で構築。詳細は[インフラ構成書](docs/infrastructure-design.md)
 
 ## プロジェクト構成
 
@@ -27,6 +29,7 @@
 ├── backend/    # Django（REST API）
 ├── frontend/   # Vue.js（画面）
 ├── e2e/        # Playwright E2Eテスト（scenarios は CI で自動実行 / performance は手動）
+├── terraform/  # 本番AWSインフラ（S3+CloudFront / ECS Fargate / RDS）
 ├── docs/       # 要件定義・設計ドキュメント
 └── docker-compose.yml   # MySQL・MinIO（ローカル開発用）
 ```
@@ -50,4 +53,4 @@
 
 テストは backend（pytest-django）・frontend（Vitest）・E2E（Playwright scenarios）を整備済みで、Lint／テスト／ビルド／E2E を PR ごとに GitHub Actions（[.github/workflows/ci.yml](.github/workflows/ci.yml)）で自動実行しています。E2E の performance トラック（`e2e/performance`、ブラウザ実測タイミング）は手動実行です。k6 負荷試験・Lighthouse 監査（`perf-tests/`）はテンプレートのみで未整備です。
 
-今後は本番デプロイ環境の整備を進めます。
+本番デプロイは AWS 構成を [`terraform/`](terraform/) にコード化し、バックエンドを本番設定に対応させ済み（[インフラ構成書](docs/infrastructure-design.md)にデプロイ手順あり）。実際の `terraform apply`／イメージ push は未実施です。

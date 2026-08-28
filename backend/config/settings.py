@@ -276,20 +276,25 @@ if not DEBUG:
     SILENCED_SYSTEM_CHECKS = ["security.W004", "security.W008", "mail.E001"]
 
 # 画像ストレージ（Amazon S3 / 開発時はMinIO）
-# 基本設計書 1〜2章・6.3節: プロキシアップロード方式
-# （署名付きURLではなくサーバー経由でS3/MinIOに書き込む）。
-# docker-compose.ymlのminioサービスはバケットを匿名read公開しているため、
-# querystring_auth=Falseで署名なしの素のURLを生成する（本番S3もバケットポリシーで
-# 匿名read公開し、同じく署名なしURLをDBに保存する）。addressing_styleは、MinIOが
-# virtual-hosted-style（バケット名をホスト名の一部にする）に対応しないため既定"path"。
-# 本番S3では"virtual"を環境変数で指定できる。
+# 基本設計書 1〜2章・6.3節: プロキシアップロード方式（署名付きURLではなくサーバー経由で書き込む）。
+# 基本設計書 7章: 本番の画像用バケットは非公開とし、CloudFront（OAC）の /media/* ビヘイビア
+# 経由でのみ配信する。バックエンドは querystring_auth=False で署名なしURLを生成し、
+# custom_domain（CloudFrontドメイン）+ location="media" によって
+# https://<cloudfront>/media/<folder>/<uuid>.<ext> という配信URLをDBに保存する。
+# ローカル開発は MinIO を匿名read公開で使う（custom_domain・location なし、
+# addressing_style="path" は MinIO が virtual-hosted-style 非対応のため必須）。
 AWS_S3_BUCKET = os.environ.get("AWS_S3_BUCKET", "pen-and-palette-media")
 AWS_S3_ADDRESSING_STYLE = os.environ.get("AWS_S3_ADDRESSING_STYLE", "path")
+AWS_S3_LOCATION = os.environ.get("AWS_S3_LOCATION", "")
+# CloudFrontドメイン（例: dxxxx.cloudfront.net）。設定するとS3直リンクではなくこのドメインの
+# URLが生成される。スキームは付けない。
+AWS_S3_CUSTOM_DOMAIN = os.environ.get("AWS_S3_CUSTOM_DOMAIN") or None
 # 本番のAmazon S3では未設定のままにし、boto3のデフォルトエンドポイントを使わせる。
-# ローカル開発は.envでMinIOのURLを指定する
 AWS_S3_ENDPOINT_URL = os.environ.get("AWS_S3_ENDPOINT_URL") or None
-AWS_ACCESS_KEY_ID = os.environ.get("AWS_ACCESS_KEY_ID", "minioadmin")
-AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY", "minioadmin")
+# 未設定なら boto3 のデフォルト認証チェーン（本番はECSタスクロール）に委ねる。
+# ローカル開発は .env で MinIO の minioadmin を明示する。
+AWS_ACCESS_KEY_ID = os.environ.get("AWS_ACCESS_KEY_ID") or None
+AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY") or None
 AWS_S3_REGION_NAME = os.environ.get("AWS_S3_REGION_NAME", "us-east-1")
 
 STORAGES = {
@@ -297,6 +302,8 @@ STORAGES = {
         "BACKEND": "storages.backends.s3boto3.S3Boto3Storage",
         "OPTIONS": {
             "bucket_name": AWS_S3_BUCKET,
+            "location": AWS_S3_LOCATION,
+            "custom_domain": AWS_S3_CUSTOM_DOMAIN,
             "endpoint_url": AWS_S3_ENDPOINT_URL,
             "access_key": AWS_ACCESS_KEY_ID,
             "secret_key": AWS_SECRET_ACCESS_KEY,
@@ -304,7 +311,7 @@ STORAGES = {
             "addressing_style": AWS_S3_ADDRESSING_STYLE,
             "querystring_auth": False,
             "file_overwrite": False,
-            # MinIO/本番バケットともACLは使わず、匿名read公開はバケットポリシー側で設定する
+            # MinIO/本番バケットともACLは使わない（本番は非公開、配信はCloudFront OAC経由）
             "default_acl": None,
         },
     },
