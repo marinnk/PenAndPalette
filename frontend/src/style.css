@@ -428,8 +428,12 @@ code {
   gap: 8px;
 }
 
-/* ヘッダーから直接キーワード検索する入力欄（画面設計書1.5節） */
+/* ヘッダーから直接キーワード検索する入力欄と、その直下に出る候補一覧（画面設計書1.5節） */
 .app-header-search {
+  position: relative;
+}
+
+.app-header-search form {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -444,6 +448,44 @@ code {
   font: inherit;
   font-size: 14px;
   width: 160px;
+}
+
+.app-header-search-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 10;
+  width: max-content;
+  min-width: 240px;
+  max-width: 360px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 4px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  text-align: left;
+}
+
+.app-header-search-status {
+  margin: 0;
+  padding: 8px 12px;
+  font-size: 14px;
+}
+
+.app-header-nav .app-header-search-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  color: var(--text-h);
+  text-decoration: none;
+}
+
+.app-header-nav .app-header-search-item:hover {
+  background: var(--code-bg);
 }
 
 /* アイコン画像の共通スタイル（components/AvatarIcon.vueが使う）。ヘッダー・投稿カード・
@@ -474,25 +516,44 @@ code {
   cursor: pointer;
 }
 
-/* F-6 リクエスト機能: ヘッダーの通知バッジ（届いたリクエストがある場合のみ表示）。
-   クリックすると届いたリクエストの一覧をドロップダウンで表示する */
+/* F-6 リクエスト機能: ヘッダーの通知アイコン（届いたリクエストがある場合のみ表示）。
+   件数はアイコン右上のバッジで示し、クリックで届いたリクエストの一覧をドロップダウン表示する */
 .app-header-requests {
   position: relative;
 }
 
-.app-header-request-badge {
+.app-header-nav .app-header-request-badge {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  background: var(--accent-bg);
-  color: var(--accent);
-  border: 1px solid var(--accent-border);
-  border-radius: 999px;
-  padding: 4px 12px;
-  font: inherit;
-  font-size: 14px;
-  white-space: nowrap;
+  justify-content: center;
+  padding: 4px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  line-height: 1;
   cursor: pointer;
+}
+
+.app-header-request-icon {
+  font-size: 20px;
+}
+
+.app-header-request-count {
+  position: absolute;
+  top: -3px;
+  right: -5px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+  text-align: center;
 }
 
 .app-header-request-dropdown {

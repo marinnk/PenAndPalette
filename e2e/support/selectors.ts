@@ -35,6 +35,9 @@ export const header = {
   requestBadge: (page: Page) => page.getByTestId('header-request-badge'),
   searchInput: (page: Page) => page.getByTestId('header-search-input'),
   searchSubmit: (page: Page) => page.getByTestId('header-search-submit'),
+  searchResultItem: (page: Page, userId: number) =>
+    page.getByTestId(`header-search-item-${userId}`),
+  requestCount: (page: Page) => page.getByTestId('header-request-count'),
 }
 
 export const timeline = {

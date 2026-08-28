@@ -13,7 +13,6 @@ vi.mock('@/lib/apiClient', () => ({
 const TimelineStub = { template: '<div>timeline</div>' }
 const ProfileStub = { template: '<div>profile</div>' }
 const LoginStub = { template: '<div>login</div>' }
-const SearchStub = { template: '<div>search</div>' }
 
 function renderAppHeader(avatarUrl: string | null = null) {
   const pinia = createPinia()
@@ -27,7 +26,6 @@ function renderAppHeader(avatarUrl: string | null = null) {
       { path: '/', name: 'timeline', component: TimelineStub },
       { path: '/profile/:id', name: 'profile', component: ProfileStub },
       { path: '/login', name: 'login', component: LoginStub },
-      { path: '/search', name: 'user-search', component: SearchStub },
     ],
   })
   const result = render(AppHeader, { global: { plugins: [pinia, router] } })
@@ -54,7 +52,19 @@ describe('AppHeader', () => {
     })
   })
 
-  it('検索入力欄にキーワードを入力して実行すると検索画面へ ?q= 付きで遷移する', async () => {
+  function mockUserSearch(users: { id: number; display_name: string }[]) {
+    vi.mocked(apiClient.get).mockImplementation((url: string) => {
+      if (url === '/api/users/') {
+        return Promise.resolve({
+          data: users.map((u) => ({ username: `u${u.id}`, avatar_url: null, ...u })),
+        })
+      }
+      return Promise.resolve({ data: [] })
+    })
+  }
+
+  it('検索入力欄で実行すると入力欄の直下に候補が一覧表示され、選ぶとプロフィールへ遷移する', async () => {
+    mockUserSearch([{ id: 2, display_name: '次郎' }])
     const { router } = renderAppHeader()
     await router.isReady()
 
@@ -62,19 +72,56 @@ describe('AppHeader', () => {
     await fireEvent.click(screen.getByTestId('header-search-submit'))
 
     await waitFor(() => {
-      expect(router.currentRoute.value.name).toBe('user-search')
-      expect(router.currentRoute.value.query.q).toBe('次郎')
+      expect(apiClient.get).toHaveBeenCalledWith('/api/users/', { params: { q: '次郎' } })
+      expect(screen.getByTestId('header-search-item-2')).toHaveTextContent('次郎')
+    })
+    // 検索画面へは遷移せず、その場で候補が出る
+    expect(router.currentRoute.value.name).toBe('timeline')
+
+    await fireEvent.click(screen.getByTestId('header-search-item-2'))
+    await waitFor(() => {
+      expect(router.currentRoute.value.name).toBe('profile')
+      expect(router.currentRoute.value.params.id).toBe('2')
+    })
+    // 遷移後は候補を閉じ、入力もリセットする
+    expect(screen.queryByTestId('header-search-dropdown')).not.toBeInTheDocument()
+    expect(screen.getByTestId('header-search-input')).toHaveValue('')
+  })
+
+  it('入力を止めると自動的に検索して候補を出す（デバウンス）', async () => {
+    mockUserSearch([{ id: 3, display_name: '三郎' }])
+    const { router } = renderAppHeader()
+    await router.isReady()
+
+    await fireEvent.update(screen.getByTestId('header-search-input'), '三郎')
+
+    await waitFor(() => {
+      expect(screen.getByTestId('header-search-item-3')).toBeInTheDocument()
+    })
+    expect(apiClient.get).toHaveBeenCalledWith('/api/users/', { params: { q: '三郎' } })
+  })
+
+  it('該当する利用者がいないときは候補内にその旨を表示する', async () => {
+    mockUserSearch([])
+    const { router } = renderAppHeader()
+    await router.isReady()
+
+    await fireEvent.update(screen.getByTestId('header-search-input'), 'いない人')
+    await fireEvent.click(screen.getByTestId('header-search-submit'))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('header-search-empty')).toBeInTheDocument()
     })
   })
 
-  it('検索キーワードが空白のみのときは遷移しない', async () => {
-    const { router } = renderAppHeader()
-    await router.isReady()
+  it('検索キーワードが空白のみのときは検索せず候補も出さない', async () => {
+    renderAppHeader()
 
     await fireEvent.update(screen.getByTestId('header-search-input'), '   ')
     await fireEvent.click(screen.getByTestId('header-search-submit'))
 
-    expect(router.currentRoute.value.name).toBe('timeline')
+    expect(apiClient.get).not.toHaveBeenCalledWith('/api/users/', expect.anything())
+    expect(screen.queryByTestId('header-search-dropdown')).not.toBeInTheDocument()
   })
 
   it('アイコン画像が設定されている場合はプロフィールリンクに表示する', async () => {
@@ -120,7 +167,7 @@ describe('AppHeader', () => {
     expect(screen.queryByTestId('header-request-badge')).not.toBeInTheDocument()
   })
 
-  it('届いたリクエストがある場合は件数付きの通知バッジを🔔絵文字なしで表示する', async () => {
+  it('届いたリクエストがある場合はアイコンと件数バッジのみ表示する（説明文字は出さない）', async () => {
     vi.mocked(apiClient.get).mockResolvedValue({
       data: [
         {
@@ -130,15 +177,23 @@ describe('AppHeader', () => {
           message: 'こんにちは',
           created_at: '2026-08-24T00:00:00Z',
         },
+        {
+          id: 2,
+          from_user: { id: 3, username: 'sabu', display_name: '三郎', avatar_url: null },
+          related_post: null,
+          message: 'よろしく',
+          created_at: '2026-08-24T00:00:00Z',
+        },
       ],
     })
     renderAppHeader()
 
     await waitFor(() => {
-      const badge = screen.getByTestId('header-request-badge')
-      expect(badge).toHaveTextContent('届いたリクエスト 1')
-      expect(badge.textContent).not.toContain('🔔')
+      expect(screen.getByTestId('header-request-count')).toHaveTextContent('2')
     })
+    const badge = screen.getByTestId('header-request-badge')
+    expect(badge).not.toHaveTextContent('届いたリクエスト')
+    expect(badge).toHaveAttribute('aria-label', '届いたリクエスト 2件')
   })
 
   it('通知バッジをクリックすると届いたリクエストの一覧がドロップダウンで表示される', async () => {

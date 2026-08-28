@@ -21,18 +21,22 @@ test.describe('ユーザー検索', () => {
     await expect(profileScreen.displayName(page)).toHaveText(secondUser.displayName)
   })
 
-  test('画面共通ヘッダーの検索入力欄からもキーワードで検索できる', async ({
+  test('画面共通ヘッダーの検索入力欄に入力すると直下に候補が出て、選ぶとプロフィールへ遷移できる', async ({
     authedPage: page,
     secondUser,
   }) => {
     await page.goto('/')
     await header.searchInput(page).fill(secondUser.username)
-    await header.searchSubmit(page).click()
 
-    await expect(page).toHaveURL(/\/search\?q=/)
-    const item = searchScreen.resultItem(page, secondUser.id)
+    // 検索画面へは遷移せず、その場で候補が出る
+    const item = header.searchResultItem(page, secondUser.id)
     await expect(item).toBeVisible()
     await expect(item).toContainText(secondUser.displayName)
+    await expect(page).toHaveURL(/\/$/)
+
+    await item.click()
+    await expect(page).toHaveURL(new RegExp(`/profile/${secondUser.id}$`))
+    await expect(profileScreen.displayName(page)).toHaveText(secondUser.displayName)
   })
 
   test('空のキーワードでは検索が実行されない', async ({ authedPage: page }) => {

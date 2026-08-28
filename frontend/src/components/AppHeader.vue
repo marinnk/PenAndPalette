@@ -1,31 +1,51 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useReceivedRequests } from '@/composables/useReceivedRequests'
+import { useHeaderSearch } from '@/composables/useHeaderSearch'
 import AvatarIcon from '@/components/AvatarIcon.vue'
 
 // S03・S05・S07・S09が共通で持つヘッダー（画面設計書1.5節）。
 const router = useRouter()
+const route = useRoute()
 const auth = useAuthStore()
 const { receivedRequests, load: loadReceivedRequests } = useReceivedRequests()
 const showRequestsDropdown = ref(false)
-// ヘッダーから直接キーワードを入力して検索できるようにする（画面設計書1.5節）。
-// 実行するとS09（検索結果画面）へ ?q= 付きで遷移し、その画面で検索を実行する
-const searchKeyword = ref('')
 
-function submitSearch() {
-  const q = searchKeyword.value.trim()
-  if (!q) return
-  router.push({ name: 'user-search', query: { q } })
-  searchKeyword.value = ''
+// ヘッダーの検索入力欄。入力すると入力欄の直下に候補を一覧表示し、選ぶとプロフィールへ遷移する
+const {
+  keyword: searchKeyword,
+  users: searchUsers,
+  loading: searchLoading,
+  error: searchError,
+  hasSearched: searchHasSearched,
+  open: showSearchResults,
+  runNow: runSearch,
+  close: closeSearch,
+  reset: resetSearch,
+  stop: stopSearch,
+} = useHeaderSearch()
+const searchEl = ref<HTMLElement | null>(null)
+
+// 入力欄・候補の外側をクリックしたら候補を閉じる（候補内のクリックは遷移させたいので閉じない）
+function onDocumentPointerDown(event: PointerEvent) {
+  if (searchEl.value && !searchEl.value.contains(event.target as Node)) closeSearch()
 }
+
+// 候補から利用者を選ぶ等で別画面へ移動したら、候補を閉じて入力もリセットする
+watch(() => route.fullPath, resetSearch)
 
 // AppHeaderは各画面のテンプレート内に直接置かれており、画面遷移のたびにマウントし直される。
 // 通知バッジの件数・ドロップダウンの中身の両方に使うため、マウント時に1回取得しておく
 // （ドロップダウンを開く時点では再取得しない）
 onMounted(() => {
   if (auth.currentUser) loadReceivedRequests()
+  document.addEventListener('pointerdown', onDocumentPointerDown)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', onDocumentPointerDown)
+  stopSearch()
 })
 
 function toggleRequestsDropdown() {
@@ -42,21 +62,51 @@ async function handleLogout() {
   <header class="app-header">
     <RouterLink :to="{ name: 'timeline' }" class="app-header-title">PenAndPalette</RouterLink>
     <nav class="app-header-nav">
-      <form
-        v-if="auth.currentUser"
-        class="app-header-search"
-        role="search"
-        @submit.prevent="submitSearch"
-      >
-        <input
-          v-model="searchKeyword"
-          type="search"
-          placeholder="利用者を検索"
-          aria-label="利用者を検索"
-          data-testid="header-search-input"
-        />
-        <button type="submit" data-testid="header-search-submit">検索</button>
-      </form>
+      <div v-if="auth.currentUser" ref="searchEl" class="app-header-search">
+        <form role="search" @submit.prevent="runSearch">
+          <input
+            v-model="searchKeyword"
+            type="search"
+            placeholder="利用者を検索"
+            aria-label="利用者を検索"
+            data-testid="header-search-input"
+          />
+          <button type="submit" data-testid="header-search-submit">検索</button>
+        </form>
+        <div
+          v-if="showSearchResults"
+          class="app-header-search-dropdown"
+          data-testid="header-search-dropdown"
+        >
+          <p v-if="searchLoading" class="app-header-search-status" data-testid="header-search-loading">
+            検索中...
+          </p>
+          <p
+            v-else-if="searchError"
+            class="app-header-search-status field-error"
+            data-testid="header-search-error"
+          >
+            検索に失敗しました。
+          </p>
+          <p
+            v-else-if="searchHasSearched && searchUsers.length === 0"
+            class="app-header-search-status"
+            data-testid="header-search-empty"
+          >
+            該当する利用者がいません。
+          </p>
+          <RouterLink
+            v-for="user in searchUsers"
+            :key="user.id"
+            :to="{ name: 'profile', params: { id: user.id } }"
+            class="app-header-search-item"
+            :data-testid="`header-search-item-${user.id}`"
+          >
+            <AvatarIcon :src="user.avatar_url" :size="24" />
+            {{ user.display_name }}
+          </RouterLink>
+        </div>
+      </div>
 
       <RouterLink
         v-if="auth.currentUser"
@@ -74,9 +124,13 @@ async function handleLogout() {
           class="app-header-request-badge"
           data-testid="header-request-badge"
           :aria-expanded="showRequestsDropdown"
+          :aria-label="`届いたリクエスト ${receivedRequests.length}件`"
           @click="toggleRequestsDropdown"
         >
-          届いたリクエスト {{ receivedRequests.length }}
+          <span class="app-header-request-icon" aria-hidden="true">📨</span>
+          <span class="app-header-request-count" data-testid="header-request-count">
+            {{ receivedRequests.length }}
+          </span>
         </button>
         <div
           v-if="showRequestsDropdown"
