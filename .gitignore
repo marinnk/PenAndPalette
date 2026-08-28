@@ -37,6 +37,11 @@ terraform/*_override.tf
 terraform/*_override.tf.json
 *.tfvars
 
+# perf-tests（node_modules は各サブディレクトリの .gitignore、レポートは results/.gitignore）
+perf-tests/**/node_modules/
+perf-tests/results/*
+!perf-tests/results/.gitignore
+
 # Editors
 .vscode/
 .idea/

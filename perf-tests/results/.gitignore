@@ -1,0 +1,4 @@
+# レポート（k6 の HTML・Lighthouse の html/json）はコミットしない。
+# このディレクトリ自体は残す。
+*
+!.gitignore
