@@ -14,6 +14,43 @@
 - [基本設計書](docs/basic-design.md)：技術スタック・データベース設計（ER図）など、どう作るか
 - [インフラ構成書](docs/infrastructure-design.md)：本番AWS構成（Terraform）・デプロイ手順
 
+## スクリーンショット
+
+> ローカル環境で表示用のダミーデータを投入して撮影したものです（画像はプレースホルダー）。
+
+### タイムライン
+
+<p>
+  <img src="docs/assets/timeline.png" width="49%" alt="タイムライン（イラスト）">
+  <img src="docs/assets/timeline-novel.png" width="49%" alt="タイムライン（小説・分類タグ絞り込み）">
+</p>
+
+全体／フォロー中、イラスト／小説の切り替え、分類タグでの絞り込み、`id` カーソルベースの無限スクロール。新着投稿はバナーで通知。
+
+### 投稿作成
+
+<img src="docs/assets/post-create.png" width="60%" alt="投稿作成">
+
+イラスト／小説の2種別。イラストは画像1〜4枚、小説はタイトル・本文（＋任意のカバー画像）。分類タグは最大5個。
+
+### プロフィール／ユーザー検索
+
+<p>
+  <img src="docs/assets/profile.png" width="49%" alt="プロフィール">
+  <img src="docs/assets/search.png" width="49%" alt="ユーザー検索">
+</p>
+
+プロフィールカード（アイコン・自己紹介・フォロー数）、投稿／ブックマークタブ、プロフィール編集。ユーザー名・表示名でのユーザー検索。
+
+### リクエスト／リアクション
+
+<p>
+  <img src="docs/assets/request.png" width="49%" alt="リクエスト作成">
+  <img src="docs/assets/post-detail.png" width="49%" alt="投稿詳細（いいね・かきたい・コメント）">
+</p>
+
+「いいね」「かきたい」、コメント（画像添付可）、個人宛てのリクエスト（参考投稿の指定、ヘッダーの通知バッジ）。
+
 ## 使用技術
 
 - バックエンド：Python / Django（Django REST Framework）、Lint/テストはruff・pytest-django
