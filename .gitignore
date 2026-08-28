@@ -23,6 +23,20 @@ e2e/results/
 e2e/test-results/
 e2e/playwright-report/
 
+# Terraform（.terraform.lock.hcl はプロバイダのバージョン固定のためコミット対象に残す）
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.*
+terraform/crash.log
+terraform/crash.*.log
+terraform/*.tfplan
+terraform/tfplan
+terraform/override.tf
+terraform/override.tf.json
+terraform/*_override.tf
+terraform/*_override.tf.json
+*.tfvars
+
 # Editors
 .vscode/
 .idea/
