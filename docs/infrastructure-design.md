@@ -12,6 +12,9 @@
 **1.1 / 2026-08-28**
 イメージのビルド〜ECS 再デプロイ〜フロント配信〜CloudFront invalidation を GitHub Actions（`.github/workflows/deploy.yml`、`workflow_dispatch` = 手動実行のみ）にまとめた。AWS 認証は OIDC で、`terraform/oidc.tf` が OIDC プロバイダとデプロイ用ロールを作る。7.7 節を追加。
 
+**1.2 / 2026-08-28**
+この構成で初めて `terraform apply`（50 リソース）→ deploy ワークフロー実行 → 疎通確認（`/api/health` 200、ECS 1/1 RUNNING、フロント 200、会員登録 API 201）→ `terraform destroy` までを一度通した。この過程で OIDC の信頼ポリシーがアカウント設定（GitHub の不変 subject claim）と噛み合わず AssumeRole が失敗したため、`terraform/oidc.tf` を `repo:<owner>/<repo>:*` と `repo:<owner>@<id>/<repo>@<id>:*` の両形式を許可するよう修正済み（#56）。撤去後、リソースの取り残しが無いことを確認した。
+
 ## 1. 方針
 
 - 本番環境の構築において、EC2 インスタンスを直接作成・管理しない

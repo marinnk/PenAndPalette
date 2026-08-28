@@ -1,6 +1,10 @@
 # PenAndPalette
 
+[![CI](https://github.com/marinnk/PenAndPalette/actions/workflows/ci.yml/badge.svg)](https://github.com/marinnk/PenAndPalette/actions/workflows/ci.yml)
+
 文字書きさんとイラストを描く人を繋ぐ、創作特化のSNS風Webアプリケーション（学習用）。
+
+> RaiseTech 受講の学習成果物です。営利目的ではなく、設計〜実装〜テスト〜AWS へのデプロイまでの一連を通すことを目的にしています。
 
 ## 概要
 
@@ -71,7 +75,60 @@
 └── docker-compose.yml   # MySQL・MinIO（ローカル開発用）
 ```
 
-起動手順は[.claude/skills/run-app/SKILL.md](.claude/skills/run-app/SKILL.md)を参照してください。
+## 動かし方（ローカル）
+
+固定ポート：バックエンド **8000** / フロントエンド **5173** / MySQL **3306**（競合したら別ポートに逃がさず、そのプロセスを止めてから起動する）。
+
+```sh
+# 1. MySQL・MinIO（画像ストレージのローカル代替）を起動
+docker compose up -d
+
+# 2. バックエンド（Django REST API → http://localhost:8000）
+cd backend
+python3 -m venv .venv && source .venv/bin/activate   # 初回のみ
+pip install -r requirements.txt                       # 初回・依存追加時のみ
+python manage.py migrate
+python manage.py runserver 8000
+
+# 3. フロントエンド（Vue → http://localhost:5173）
+cd frontend
+npm install                                           # 初回・依存追加時のみ
+npm run dev
+```
+
+詳しい注意点は[.claude/skills/run-app/SKILL.md](.claude/skills/run-app/SKILL.md)を参照してください。
+
+## テスト
+
+```sh
+# バックエンド（要 docker compose up -d db：pytest-django が同じ MySQL 上に使い捨てDBを作る）
+cd backend && ruff check . && ruff format --check . && pytest
+
+# フロントエンド
+cd frontend && npm run lint && npm run test && npm run build
+
+# E2E（Playwright、scenarios は CI で自動実行）
+cd e2e && npm run test:scenarios
+
+# 負荷試験・監査（手動のみ）：k6 / Lighthouse
+#   perf-tests/ 配下。詳細は .claude/skills/perf-test/SKILL.md
+```
+
+Lint／テスト／ビルド／E2E（scenarios）は PR ごとに GitHub Actions（[.github/workflows/ci.yml](.github/workflows/ci.yml)）で自動実行しています。
+
+## デプロイ実績
+
+2026-08-28、`terraform/` のコードから AWS 本番環境を構築し、アプリをデプロイして全機能の疎通を確認しました。
+
+| 項目 | 内容 |
+| --- | --- |
+| 本番URL（当時） | `https://dpedkz9y01bvi.cloudfront.net` ※現在は撤去済みでアクセスできません |
+| 構成 | CloudFront（3オリジン）＋ ECS Fargate（Django/gunicorn, ARM64）＋ RDS for MySQL 8.4 ＋ S3（フロント・画像とも非公開/OAC）＋ Secrets Manager。すべて Terraform |
+| デプロイ | GitHub Actions（`deploy.yml`、手動実行・OIDC 認証）でイメージビルド → ECS 再デプロイ → フロント S3 sync → CloudFront invalidation |
+| 確認したこと | `/api/health` = `{"status":"ok"}`、ECS 1/1 RUNNING、フロント 200、会員登録 API 201、未認証で `/api/posts` 401、ブラウザで主要画面の動作 |
+| 撤去 | 確認後に `terraform destroy` で全 50 リソースを削除（学習用途・コスト回避のため） |
+
+`terraform apply` → デプロイ → 確認 → `terraform destroy` の一連は再現可能な状態でコード化されています。手順は[インフラ構成書](docs/infrastructure-design.md)の Runbook（7章）を参照してください。
 
 ## ステータス
 
@@ -88,6 +145,6 @@
 - F-9 ユーザー検索
 - F-11 分類タグ（投稿への付与・タイムラインでの絞り込み）
 
-テストは backend（pytest-django）・frontend（Vitest）・E2E（Playwright scenarios）を整備済みで、Lint／テスト／ビルド／E2E を PR ごとに GitHub Actions（[.github/workflows/ci.yml](.github/workflows/ci.yml)）で自動実行しています。E2E の performance トラック（`e2e/performance`、ブラウザ実測タイミング）は手動実行です。k6 負荷試験・Lighthouse 監査（`perf-tests/`）はテンプレートのみで未整備です。
+テストは backend（pytest-django）・frontend（Vitest）・E2E（Playwright scenarios）を整備済みで、Lint／テスト／ビルド／E2E を PR ごとに GitHub Actions（[.github/workflows/ci.yml](.github/workflows/ci.yml)）で自動実行しています。E2E の performance トラック（`e2e/performance`、ブラウザ実測タイミング）と、k6 負荷試験・Lighthouse 監査（`perf-tests/`）は手動実行です。
 
-本番デプロイは AWS 構成を [`terraform/`](terraform/) にコード化し、バックエンドを本番設定に対応させ、イメージビルド〜配信を GitHub Actions（`.github/workflows/deploy.yml`、手動実行・OIDC 認証）にまとめ済み（[インフラ構成書](docs/infrastructure-design.md)にデプロイ手順あり）。実際の `terraform apply`／デプロイ実行は未実施です。
+本番デプロイは AWS 構成を [`terraform/`](terraform/) にコード化し、バックエンドを本番設定に対応させ、イメージビルド〜配信を GitHub Actions（`.github/workflows/deploy.yml`、手動実行・OIDC 認証）にまとめています。2026-08-28 に実際に `terraform apply` → デプロイ → 全機能の疎通確認 → `terraform destroy` までを一度実施しました（[デプロイ実績](#デプロイ実績)）。
