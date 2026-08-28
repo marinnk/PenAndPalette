@@ -4,7 +4,7 @@ import { createLatestRequest } from '@/lib/latestRequest'
 import { useReactablePosts } from '@/composables/usePostReactions'
 import { useDeletablePosts } from '@/composables/usePostDelete'
 import type { Post, PostListResponse } from '@/types/post'
-import type { Profile } from '@/types/profile'
+import type { Profile, ProfileTab } from '@/types/profile'
 
 // S07 プロフィール画面
 export function useProfile() {
@@ -12,27 +12,43 @@ export function useProfile() {
   const posts = ref<Post[]>([])
   const loading = ref(false)
   const error = ref(false)
+  // 「投稿」「ブックマーク」タブ（自分のプロフィールのみ）。タブ切替では一覧部分だけを
+  // 差し替えたいので、プロフィールカードごと隠す loading とは別に postsLoading を持つ
+  const tab = ref<ProfileTab>('posts')
+  const postsLoading = ref(false)
+  const postsError = ref(false)
   const followError = ref<string | null>(null)
   const followPending = ref(false)
 
   const { reactionError, isPending, toggleLike, toggleWant } = useReactablePosts(posts)
   const { deleteError, isDeleting, deletePost } = useDeletablePosts(posts)
 
-  // load呼び出しの世代トークン。Vue Routerは/users/:id内の別idへの遷移でコンポーネント
-  // インスタンスを使い回すため、プロフィール間を素早く行き来すると先に始まったloadの
-  // 応答が後から届いて別ユーザーの表示を上書きしうる。それを防ぐ（useComments等と同じ）
+  // load / selectTab 共通の世代トークン。Vue Routerは/profile/:id内の別idへの遷移で
+  // コンポーネントインスタンスを使い回すため、素早く行き来すると先に始まった取得の応答が
+  // 後から届いて別ユーザー・別タブの表示を上書きしうる。それを防ぐ（useComments等と同じ）
   const latestLoad = createLatestRequest()
+  let currentUserId = 0
+
+  // 「投稿」タブは user_id、「ブックマーク」タブは liked_by（＝その利用者がいいねした投稿）で
+  // 同じ GET /api/posts を呼ぶ。ブックマークはいいねを兼用する（基本設計書6.3章）
+  function postsParams() {
+    return tab.value === 'bookmarks' ? { liked_by: currentUserId } : { user_id: currentUserId }
+  }
 
   async function load(userId: number) {
     const token = latestLoad.begin()
+    currentUserId = userId
+    // プロフィールを開くたびに「投稿」タブから始める
+    tab.value = 'posts'
     loading.value = true
     error.value = false
+    postsError.value = false
     deleteError.value = null
     followError.value = null
     try {
       const [profileRes, postsRes] = await Promise.all([
         apiClient.get<Profile>(`/api/users/${userId}`),
-        apiClient.get<PostListResponse>('/api/posts', { params: { user_id: userId } }),
+        apiClient.get<PostListResponse>('/api/posts', { params: postsParams() }),
       ])
       if (token.isStale()) return
       profile.value = profileRes.data
@@ -42,6 +58,26 @@ export function useProfile() {
       error.value = true
     } finally {
       if (!token.isStale()) loading.value = false
+    }
+  }
+
+  async function selectTab(newTab: ProfileTab) {
+    if (tab.value === newTab) return
+    const token = latestLoad.begin()
+    tab.value = newTab
+    postsLoading.value = true
+    postsError.value = false
+    try {
+      const { data } = await apiClient.get<PostListResponse>('/api/posts', {
+        params: postsParams(),
+      })
+      if (token.isStale()) return
+      posts.value = data.results
+    } catch {
+      if (token.isStale()) return
+      postsError.value = true
+    } finally {
+      if (!token.isStale()) postsLoading.value = false
     }
   }
 
@@ -73,6 +109,10 @@ export function useProfile() {
     posts,
     loading,
     error,
+    tab,
+    postsLoading,
+    postsError,
+    selectTab,
     reactionError,
     isPending,
     deleteError,

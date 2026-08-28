@@ -105,6 +105,9 @@ export const profileScreen = {
   followButton: (page: Page) => page.getByTestId('profile-follow-button'),
   requestButton: (page: Page) => page.getByTestId('profile-request-button'),
   postsEmpty: (page: Page) => page.getByTestId('profile-posts-empty'),
+  tabPosts: (page: Page) => page.getByTestId('profile-tab-posts'),
+  tabBookmarks: (page: Page) => page.getByTestId('profile-tab-bookmarks'),
+  bookmarksEmpty: (page: Page) => page.getByTestId('profile-bookmarks-empty'),
 }
 
 export const profileEditScreen = {

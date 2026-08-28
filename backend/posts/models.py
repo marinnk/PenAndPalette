@@ -33,6 +33,7 @@ class PostManager(models.Manager.from_queryset(PostQuerySet)):
         *,
         scope=None,
         user_id=None,
+        liked_by=None,
         post_type=None,
         tag_id=None,
         before_id=None,
@@ -56,6 +57,12 @@ class PostManager(models.Manager.from_queryset(PostQuerySet)):
         # （基本設計書6.3章：「全体／フォロー中」×「イラスト／小説」は自由に組み合わせられる）
         if post_type:
             qs = qs.filter(post_type=post_type)
+        # liked_byもscope・user_idと独立した軸（プロフィール画面の「ブックマーク」タブ＝
+        # その利用者がいいねした投稿一覧に使う）。.filter(likes__user_id=...)ではなく
+        # Exists()で絞り込むのは、with_reactions()のlike_count=Count("likes")のJOINと
+        # 結合されてlike_countが1に潰れるのを避けるため（liked_by_meのExistsと同じ方式）
+        if liked_by:
+            qs = qs.filter(Exists(Like.objects.filter(post=OuterRef("pk"), user_id=liked_by)))
         # tag_idもscope・post_typeと独立した軸。tag_idは単一指定なので中間テーブルの
         # JOINで行が重複することはなく、distinct()は不要
         if tag_id:

@@ -362,13 +362,14 @@ erDiagram
 
 | メソッド | パス | 説明 |
 |---|---|---|
-| GET | /api/posts?limit=\&before_id=\&after_id=\&user_id=\&scope=\&post_type=\&tag_id= | 投稿一覧を新しい順（`id`降順）に取得する |
+| GET | /api/posts?limit=\&before_id=\&after_id=\&user_id=\&liked_by=\&scope=\&post_type=\&tag_id= | 投稿一覧を新しい順（`id`降順）に取得する |
 | POST | /api/posts | 投稿を作成する（multipart/form-data）。`post_type`：'illustration'または'novel'必須。`title`：小説投稿のみ必須（1〜100文字）、イラスト投稿では送らない。`body`：イラスト投稿は任意（0〜280文字）、小説投稿は必須（1〜4000文字）。`images`：イラスト投稿は1〜4枚必須、小説投稿は0〜1枚（カバー画像）。`tag_ids`：分類タグのidを0〜5個 |
 | GET | /api/posts/{post_id} | 投稿の詳細を取得する |
 | PUT | /api/posts/{post_id} | 自分の投稿を編集する（multipart/form-data。`title`・`body`：種別ごとの入力ルールに従う、`keep_image_ids`：残す既存画像のidをカンマ区切りで指定、`images`：新規追加する画像ファイル、`tag_ids`：分類タグのidを0〜5個）。他人の投稿を指定した場合は403 |
 | DELETE | /api/posts/{post_id} | 自分の投稿を削除する。付随するコメント・いいね・かきたいはDBの外部キー制約（ON DELETE CASCADE）により自動的に削除される。他人の投稿を指定した場合は403 |
 
-- `user_id`を指定すると、その利用者の投稿のみに絞り込む（プロフィール画面の投稿一覧に使用）
+- `user_id`を指定すると、その利用者の投稿のみに絞り込む（プロフィール画面の「投稿」タブに使用）
+- `liked_by`を指定すると、その利用者がいいねした投稿のみに絞り込む（プロフィール画面の「ブックマーク」タブに使用。ブックマークはいいねを兼用する）。`user_id`・`scope`とは独立した軸で、存在しないidを指定しても400にはせず該当0件として扱う。`like_count`の集計（`Count("likes")`）が絞り込みのJOINと結合されて潰れないよう、`liked_by`の絞り込みは`.filter(likes__user_id=...)`ではなく`Exists`サブクエリで行う（`liked_by_me`と同じ方式）
 - `scope=following`を指定すると、フォロー中の利用者（および自分自身）の投稿のみに絞り込む（タイムラインの「フォロー中」タブに使用）。省略時・`scope=all`は絞り込みなし（「全体」タブ）
 - `post_type=illustration`または`post_type=novel`を指定すると、その種別の投稿のみに絞り込む（タイムラインのイラスト／小説タブに使用）。省略時は両方の種別を含める。`scope`（全体／フォロー中）とは独立した軸のため、`user_id`と`scope`の同時指定制限とは異なり`post_type`はこれらと自由に組み合わせられる（例：`scope=following&post_type=novel`で「フォロー中の小説投稿のみ」）
 - `tag_id`を指定すると、その分類タグ（6.11節）が付いた投稿のみに絞り込む（タイムラインの「絞り込み」セクションに使用）。単一指定のみで、`scope`・`post_type`とは独立した軸のため自由に組み合わせられる（例：`scope=following&tag_id=3`）。存在しないidを指定しても400にはせず、該当0件として扱う。中間テーブル`post_tags`のJOINで行が重複しないよう単一タグ指定に限る

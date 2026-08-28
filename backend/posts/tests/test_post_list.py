@@ -322,3 +322,59 @@ class PostListTests(APITestCase):
 
         ids = [row["id"] for row in response.json()["results"]]
         self.assertEqual(ids, [multi.id])
+
+    def test_liked_by_filters_to_posts_that_user_liked(self):
+        """liked_byはプロフィール画面の「ブックマーク」タブ（＝その利用者がいいねした投稿一覧）
+        に使う。ブックマークはいいねを兼用する。
+        """
+        self._login()
+        author = create_user(
+            username="likedby-author", email="likedby-author@example.com", display_name="Author"
+        )
+        liked = create_post(author, body="いいねした投稿")
+        create_post(author, body="いいねしていない投稿")
+        other_liked = create_post(author, body="他人がいいねした投稿")
+        other = create_user(
+            username="likedby-other", email="likedby-other@example.com", display_name="Other"
+        )
+        liked.likes.create(user=self.user)
+        other_liked.likes.create(user=other)
+
+        response = self.client.get(self.url, {"liked_by": self.user.id})
+
+        ids = [row["id"] for row in response.json()["results"]]
+        self.assertEqual(ids, [liked.id])
+
+    def test_liked_by_does_not_deflate_like_count(self):
+        """liked_byの絞り込みをExists()で行うことで、like_count=Count("likes")の集計が
+        絞り込み条件のJOINと結合されて1に潰れないことを確認する。
+        """
+        self._login()
+        post = create_post(self.user, body="人気の投稿")
+        liker = create_user(
+            username="likedby-liker", email="likedby-liker@example.com", display_name="Liker"
+        )
+        post.likes.create(user=self.user)
+        post.likes.create(user=liker)
+
+        response = self.client.get(self.url, {"liked_by": self.user.id})
+
+        row = next(r for r in response.json()["results"] if r["id"] == post.id)
+        self.assertEqual(row["like_count"], 2)
+
+    def test_liked_by_unknown_user_returns_empty_results_not_400(self):
+        self._login()
+        post = create_post(self.user)
+        post.likes.create(user=self.user)
+
+        response = self.client.get(self.url, {"liked_by": 999999})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.json()["results"], [])
+
+    def test_invalid_liked_by_returns_400(self):
+        self._login()
+
+        response = self.client.get(self.url, {"liked_by": "abc"})
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)

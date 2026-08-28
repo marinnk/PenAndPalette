@@ -123,6 +123,12 @@ export async function createNovelPost(
   return ((await res.json()) as { id: number }).id
 }
 
+/** POST /api/posts/{id}/likes。投稿にいいねする（プロフィールの「ブックマーク」タブ＝
+ * いいねした作品一覧の前提データ用）。いいねは冪等なので重複呼び出ししても200。 */
+export async function likePost(request: APIRequestContext, postId: number): Promise<void> {
+  await assertOk(await request.post(apiUrl(`/api/posts/${postId}/likes`)), 'likePost')
+}
+
 /**
  * 無限スクロール検証用に、イラスト投稿を指定件数、本文に連番を付けて作成する。
  * 消費側（timeline-pagination / *-timing）は作成順を検証しないため、少しずつ並行で投げて速くする。

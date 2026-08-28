@@ -136,6 +136,71 @@ describe('useProfile', () => {
     expect(posts.value[1].want_count).toBe(0)
   })
 
+  it('selectTab: 「ブックマーク」に切り替えると liked_by で取得し直す', async () => {
+    vi.mocked(apiClient.get).mockImplementation((url: string, config?: { params?: unknown }) => {
+      if (url === '/api/users/1') return Promise.resolve({ data: profile })
+      const params = (config?.params ?? {}) as { liked_by?: number; user_id?: number }
+      if (params.liked_by === 1) {
+        return Promise.resolve({ data: { results: [makePost(20)], has_more: false } })
+      }
+      return Promise.resolve({ data: { results: [makePost(1)], has_more: false } })
+    })
+    const { load, posts, tab, selectTab } = useProfile()
+    await load(1)
+    expect(posts.value.map((p) => p.id)).toEqual([1])
+
+    await selectTab('bookmarks')
+
+    expect(tab.value).toBe('bookmarks')
+    expect(apiClient.get).toHaveBeenCalledWith('/api/posts', { params: { liked_by: 1 } })
+    expect(posts.value.map((p) => p.id)).toEqual([20])
+  })
+
+  it('selectTab: 同じタブへの切替は何もしない', async () => {
+    vi.mocked(apiClient.get).mockImplementation((url: string) => {
+      if (url === '/api/users/1') return Promise.resolve({ data: profile })
+      return Promise.resolve({ data: { results: [], has_more: false } })
+    })
+    const { load, selectTab } = useProfile()
+    await load(1)
+    const callsAfterLoad = vi.mocked(apiClient.get).mock.calls.length
+
+    await selectTab('posts')
+
+    expect(vi.mocked(apiClient.get).mock.calls.length).toBe(callsAfterLoad)
+  })
+
+  it('load: プロフィールを開き直すとタブは「投稿」に戻る', async () => {
+    vi.mocked(apiClient.get).mockImplementation((url: string) => {
+      if (url.startsWith('/api/users/')) return Promise.resolve({ data: profile })
+      return Promise.resolve({ data: { results: [], has_more: false } })
+    })
+    const { load, tab, selectTab } = useProfile()
+    await load(1)
+    await selectTab('bookmarks')
+    expect(tab.value).toBe('bookmarks')
+
+    await load(2)
+
+    expect(tab.value).toBe('posts')
+  })
+
+  it('selectTab: 取得失敗時は postsError を立てる（画面全体のエラーにはしない）', async () => {
+    vi.mocked(apiClient.get).mockImplementation((url: string, config?: { params?: unknown }) => {
+      if (url === '/api/users/1') return Promise.resolve({ data: profile })
+      const params = (config?.params ?? {}) as { liked_by?: number }
+      if (params.liked_by === 1) return Promise.reject(new Error('boom'))
+      return Promise.resolve({ data: { results: [], has_more: false } })
+    })
+    const { load, selectTab, error, postsError } = useProfile()
+    await load(1)
+
+    await selectTab('bookmarks')
+
+    expect(postsError.value).toBe(true)
+    expect(error.value).toBe(false)
+  })
+
   it('toggleFollow: 未フォロー状態からPOSTしてfollowed_by_me/follower_countを反映する', async () => {
     vi.mocked(apiClient.get).mockImplementation((url: string) => {
       if (url === '/api/users/1') return Promise.resolve({ data: profile })
