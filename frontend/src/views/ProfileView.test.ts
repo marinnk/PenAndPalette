@@ -109,7 +109,7 @@ describe('ProfileView', () => {
       expect(screen.getByTestId('profile-display-name')).toBeInTheDocument()
     })
     expect(screen.queryByTestId('profile-avatar-image')).not.toBeInTheDocument()
-    expect(document.querySelector('.profile-header .avatar-placeholder')).toBeInTheDocument()
+    expect(document.querySelector('.profile-card .avatar-placeholder')).toBeInTheDocument()
   })
 
   it('プロフィール情報と投稿一覧を表示する', async () => {
@@ -266,5 +266,78 @@ describe('ProfileView', () => {
       expect(screen.getByTestId('profile-display-name')).toBeInTheDocument()
     })
     expect(screen.queryByText('届いたリクエスト')).not.toBeInTheDocument()
+  })
+
+  it('プロフィール情報がカード枠（.profile-card）にまとまっている', async () => {
+    mockApiClient()
+    renderProfileView(1)
+
+    await waitFor(() => expect(screen.getByTestId('profile-display-name')).toBeInTheDocument())
+    const card = document.querySelector('.profile-card')
+    expect(card).toBeInTheDocument()
+    expect(card).toContainElement(screen.getByTestId('profile-display-name'))
+    expect(card).toContainElement(screen.getByTestId('profile-following-count'))
+    expect(card).toContainElement(screen.getByTestId('profile-edit-button'))
+  })
+
+  it('自分のプロフィールでは「投稿」「ブックマーク」タブを表示する', async () => {
+    mockApiClient()
+    renderProfileView(1)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('profile-tab-posts')).toBeInTheDocument()
+      expect(screen.getByTestId('profile-tab-bookmarks')).toBeInTheDocument()
+    })
+  })
+
+  it('他人のプロフィールにはタブを出さず「投稿」の見出しのみ表示する', async () => {
+    mockApiClient()
+    renderProfileView(999)
+
+    await waitFor(() => expect(screen.getByTestId('profile-display-name')).toBeInTheDocument())
+    expect(screen.queryByTestId('profile-tab-bookmarks')).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '投稿' })).toBeInTheDocument()
+  })
+
+  it('「ブックマーク」タブに切り替えると liked_by で取得し、いいねした作品を表示する', async () => {
+    vi.mocked(apiClient.get).mockImplementation((url: string, config?: { params?: unknown }) => {
+      if (url === '/api/users/1') return Promise.resolve({ data: profile })
+      if (url === '/api/requests/received') return Promise.resolve({ data: [] })
+      const params = (config?.params ?? {}) as { liked_by?: number; user_id?: number }
+      if (params.liked_by === 1) {
+        return Promise.resolve({ data: { results: [makePost(20)], has_more: false } })
+      }
+      return Promise.resolve({ data: { results: [makePost(1)], has_more: false } })
+    })
+    renderProfileView(1)
+    await waitFor(() => expect(screen.getByText('投稿1')).toBeInTheDocument())
+
+    await fireEvent.click(screen.getByTestId('profile-tab-bookmarks'))
+
+    await waitFor(() => {
+      expect(apiClient.get).toHaveBeenCalledWith('/api/posts', { params: { liked_by: 1 } })
+      expect(screen.getByText('投稿20')).toBeInTheDocument()
+      expect(screen.queryByText('投稿1')).not.toBeInTheDocument()
+    })
+  })
+
+  it('「ブックマーク」タブが0件のとき専用の空状態を表示する', async () => {
+    vi.mocked(apiClient.get).mockImplementation((url: string, config?: { params?: unknown }) => {
+      if (url === '/api/users/1') return Promise.resolve({ data: profile })
+      if (url === '/api/requests/received') return Promise.resolve({ data: [] })
+      const params = (config?.params ?? {}) as { liked_by?: number }
+      if (params.liked_by === 1) return Promise.resolve({ data: { results: [], has_more: false } })
+      return Promise.resolve({ data: { results: [makePost(1)], has_more: false } })
+    })
+    renderProfileView(1)
+    await waitFor(() => expect(screen.getByText('投稿1')).toBeInTheDocument())
+
+    await fireEvent.click(screen.getByTestId('profile-tab-bookmarks'))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('profile-bookmarks-empty')).toHaveTextContent(
+        'ブックマークした作品がまだありません。',
+      )
+    })
   })
 })

@@ -409,6 +409,10 @@ class PostListQuerySerializer(serializers.Serializer):
     # 新着通知バナーが永久に表示されなくなる
     after_id = serializers.IntegerField(required=False, min_value=0)
     user_id = serializers.IntegerField(required=False, min_value=1)
+    # liked_by：指定した利用者がいいねした投稿のみに絞り込む（プロフィール画面の
+    # 「ブックマーク」タブに使用。ブックマークはいいねを兼用する）。user_id・scopeとは
+    # 独立した軸で、存在しないidを渡しても400にはせず該当0件として扱う
+    liked_by = serializers.IntegerField(required=False, min_value=1)
     scope = serializers.ChoiceField(choices=["all", "following"], required=False)
     # post_type：全体／フォロー中（scope）とは独立した軸のため、相互排他チェックは設けない
     # （基本設計書6.3章：scope=following&post_type=novel のように自由に組み合わせられる）

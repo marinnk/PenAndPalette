@@ -1048,8 +1048,13 @@ a.post-card-tag:hover {
   padding: 24px 16px 64px;
 }
 
-.profile-header {
-  margin-bottom: 24px;
+/* アイコン・表示名・自己紹介・フォロー数・（自分）編集／（他人）フォロー・リクエストを
+   1つの枠にまとめたプロフィールカード */
+.profile-card {
+  margin-bottom: 16px;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
 }
 
 /* 円形・サイズは共通の.avatar（AvatarIcon.vue）任せで、この画面固有のレイアウト
@@ -1058,7 +1063,7 @@ a.post-card-tag:hover {
   margin-bottom: 8px;
 }
 
-.profile-header h1 {
+.profile-card h1 {
   font-size: 24px;
   margin: 0 0 8px;
 }
@@ -1078,14 +1083,26 @@ a.post-card-tag:hover {
   padding: 0;
 }
 
-.profile-header-actions {
+.profile-card-actions {
   display: flex;
   gap: 12px;
 }
 
-.profile-header-actions .form-submit {
+.profile-card-actions .form-submit {
   width: auto;
   margin-top: 8px;
+}
+
+/* カード外の「投稿する」ボタン（自分のプロフィールのみ）。タイムラインの
+   .timeline-compose-button と同じ扱い */
+.profile-compose-button {
+  width: auto;
+  margin-bottom: 16px;
+}
+
+.profile-list-heading {
+  font-size: 18px;
+  margin: 0 0 16px;
 }
 
 /* F-6 リクエスト機能: 届いたリクエスト1件分の表示（ヘッダーの通知ドロップダウンで使う） */
@@ -1168,7 +1185,7 @@ a.post-card-tag:hover {
 }
 
 /* ボタン自体は.form-submitを共用し、横並びレイアウト用にwidth:100%だけ打ち消す
-   （.profile-header-actions .form-submitと同じ上書きの仕方） */
+   （.profile-card-actions .form-submitと同じ上書きの仕方） */
 .user-search-form .form-submit {
   width: auto;
 }

@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import AppHeader from '@/components/AppHeader.vue'
 import AvatarIcon from '@/components/AvatarIcon.vue'
 import PostCard from '@/components/PostCard.vue'
+import ProfileTabs from '@/components/ProfileTabs.vue'
 import { useProfile } from '@/composables/useProfile'
 import { useAuthStore } from '@/stores/auth'
 
@@ -17,6 +18,10 @@ const {
   posts,
   loading,
   error,
+  tab,
+  postsLoading,
+  postsError,
+  selectTab,
   reactionError,
   isPending,
   deleteError,
@@ -31,6 +36,12 @@ const {
 } = useProfile()
 
 const isOwnProfile = computed(() => auth.currentUser?.id === Number(props.id))
+// ブックマーク（＝いいねした作品）は本人だけが見られる。他人のプロフィールは投稿一覧のみ
+const emptyMessage = computed(() =>
+  tab.value === 'bookmarks'
+    ? 'ブックマークした作品がまだありません。'
+    : '投稿がまだありません。',
+)
 
 onMounted(() => load(Number(props.id)))
 watch(
@@ -48,7 +59,7 @@ watch(
         利用者が見つかりませんでした。
       </p>
       <template v-else>
-        <div class="profile-header">
+        <section class="profile-card">
           <AvatarIcon
             :src="profile.avatar_url"
             :size="64"
@@ -75,7 +86,7 @@ watch(
               フォロワー {{ profile.follower_count }}
             </button>
           </p>
-          <div v-if="isOwnProfile" class="profile-header-actions">
+          <div v-if="isOwnProfile" class="profile-card-actions">
             <button
               type="button"
               class="form-submit"
@@ -84,16 +95,8 @@ watch(
             >
               プロフィールを編集
             </button>
-            <button
-              type="button"
-              class="form-submit"
-              data-testid="profile-compose-button"
-              @click="router.push({ name: 'post-create' })"
-            >
-              投稿する
-            </button>
           </div>
-          <div v-else class="profile-header-actions">
+          <div v-else class="profile-card-actions">
             <button
               type="button"
               class="form-submit"
@@ -112,7 +115,17 @@ watch(
               リクエストする
             </button>
           </div>
-        </div>
+        </section>
+
+        <button
+          v-if="isOwnProfile"
+          type="button"
+          class="form-submit profile-compose-button"
+          data-testid="profile-compose-button"
+          @click="router.push({ name: 'post-create' })"
+        >
+          投稿する
+        </button>
 
         <p v-if="followError" class="field-error" data-testid="follow-error">
           {{ followError }}
@@ -124,19 +137,35 @@ watch(
           {{ deleteError }}
         </p>
 
-        <h2>{{ profile.display_name }}の投稿</h2>
-        <p v-if="posts.length === 0" class="empty-state" data-testid="profile-posts-empty">
-          投稿がまだありません。
-        </p>
-        <PostCard
-          v-for="post in posts"
-          :key="post.id"
-          :post="post"
-          :pending="isPending(post.id) || isDeleting(post.id)"
-          @toggle-like="toggleLike"
-          @toggle-want="toggleWant"
-          @delete="deletePost"
+        <ProfileTabs
+          v-if="isOwnProfile"
+          :model-value="tab"
+          @update:model-value="selectTab"
         />
+        <h2 v-else class="profile-list-heading">投稿</h2>
+
+        <p v-if="postsLoading" data-testid="profile-posts-loading">読み込み中...</p>
+        <p v-else-if="postsError" class="field-error" data-testid="profile-posts-error">
+          一覧の取得に失敗しました。
+        </p>
+        <template v-else>
+          <p
+            v-if="posts.length === 0"
+            class="empty-state"
+            :data-testid="tab === 'bookmarks' ? 'profile-bookmarks-empty' : 'profile-posts-empty'"
+          >
+            {{ emptyMessage }}
+          </p>
+          <PostCard
+            v-for="post in posts"
+            :key="post.id"
+            :post="post"
+            :pending="isPending(post.id) || isDeleting(post.id)"
+            @toggle-like="toggleLike"
+            @toggle-want="toggleWant"
+            @delete="deletePost"
+          />
+        </template>
       </template>
     </main>
   </div>
