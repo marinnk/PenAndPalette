@@ -1,11 +1,27 @@
 <script setup lang="ts">
+import { watch } from 'vue'
+import { useRoute } from 'vue-router'
 import AppHeader from '@/components/AppHeader.vue'
 import AvatarIcon from '@/components/AvatarIcon.vue'
 import BackLink from '@/components/BackLink.vue'
 import { useUserSearch } from '@/composables/useUserSearch'
 
 // S09 ユーザー検索画面（画面設計書1.5節: 共通ヘッダーを持つ画面）
+const route = useRoute()
 const { keyword, users, loading, error, hasSearched, search } = useUserSearch()
+
+// 共通ヘッダーの検索入力欄から ?q= 付きで遷移してきた場合は、その語で自動的に検索する。
+// この画面を開いたまま再度ヘッダーから検索したときもクエリの変化で再検索する
+watch(
+  () => route.query.q,
+  (q) => {
+    const value = (typeof q === 'string' ? q : '').trim()
+    if (!value) return
+    keyword.value = value
+    search()
+  },
+  { immediate: true },
+)
 </script>
 
 <template>

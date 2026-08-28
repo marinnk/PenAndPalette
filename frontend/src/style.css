@@ -428,6 +428,24 @@ code {
   gap: 8px;
 }
 
+/* ヘッダーから直接キーワード検索する入力欄（画面設計書1.5節） */
+.app-header-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.app-header-search input {
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 14px;
+  width: 160px;
+}
+
 /* アイコン画像の共通スタイル（components/AvatarIcon.vueが使う）。ヘッダー・投稿カード・
    プロフィール画面・プロフィール編集画面で表示サイズだけが異なるため、実寸は
    AvatarIcon.vueが--avatar-sizeとしてインラインで渡す */

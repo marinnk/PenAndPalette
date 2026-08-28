@@ -31,6 +31,12 @@ function renderUserSearchView() {
   return { ...result, router }
 }
 
+async function renderUserSearchViewAt(query: Record<string, string>) {
+  const rendered = renderUserSearchView()
+  await rendered.router.push({ name: 'user-search', query })
+  return rendered
+}
+
 async function typeKeyword(keyword: string) {
   await fireEvent.update(screen.getByTestId('user-search-keyword'), keyword)
   await fireEvent.click(screen.getByTestId('user-search-submit'))
@@ -134,6 +140,25 @@ describe('UserSearchView', () => {
 
     resolveSearch({ data: [] })
     await waitFor(() => expect(screen.getByTestId('user-search-submit')).not.toBeDisabled())
+  })
+
+  it('?q= 付きで開くとそのキーワードで自動的に検索する', async () => {
+    vi.mocked(apiClient.get).mockImplementation((url: string) => {
+      if (url === '/api/users/') {
+        return Promise.resolve({
+          data: [{ id: 2, username: 'jiro', display_name: '次郎', avatar_url: null }],
+        })
+      }
+      return Promise.resolve({ data: [] })
+    })
+
+    await renderUserSearchViewAt({ q: '次郎' })
+
+    await waitFor(() => {
+      expect(apiClient.get).toHaveBeenCalledWith('/api/users/', { params: { q: '次郎' } })
+      expect(screen.getByTestId('user-search-item-2')).toHaveTextContent('次郎')
+    })
+    expect(screen.getByTestId('user-search-keyword')).toHaveValue('次郎')
   })
 
   it('検索結果をクリックするとプロフィール画面へ遷移する', async () => {

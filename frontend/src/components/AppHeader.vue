@@ -10,6 +10,16 @@ const router = useRouter()
 const auth = useAuthStore()
 const { receivedRequests, load: loadReceivedRequests } = useReceivedRequests()
 const showRequestsDropdown = ref(false)
+// ヘッダーから直接キーワードを入力して検索できるようにする（画面設計書1.5節）。
+// 実行するとS09（検索結果画面）へ ?q= 付きで遷移し、その画面で検索を実行する
+const searchKeyword = ref('')
+
+function submitSearch() {
+  const q = searchKeyword.value.trim()
+  if (!q) return
+  router.push({ name: 'user-search', query: { q } })
+  searchKeyword.value = ''
+}
 
 // AppHeaderは各画面のテンプレート内に直接置かれており、画面遷移のたびにマウントし直される。
 // 通知バッジの件数・ドロップダウンの中身の両方に使うため、マウント時に1回取得しておく
@@ -32,22 +42,30 @@ async function handleLogout() {
   <header class="app-header">
     <RouterLink :to="{ name: 'timeline' }" class="app-header-title">PenAndPalette</RouterLink>
     <nav class="app-header-nav">
-      <RouterLink
+      <form
         v-if="auth.currentUser"
-        :to="{ name: 'user-search' }"
-        data-testid="header-search-link"
+        class="app-header-search"
+        role="search"
+        @submit.prevent="submitSearch"
       >
-        検索
-      </RouterLink>
+        <input
+          v-model="searchKeyword"
+          type="search"
+          placeholder="利用者を検索"
+          aria-label="利用者を検索"
+          data-testid="header-search-input"
+        />
+        <button type="submit" data-testid="header-search-submit">検索</button>
+      </form>
 
       <RouterLink
         v-if="auth.currentUser"
         :to="{ name: 'profile', params: { id: auth.currentUser.id } }"
         class="app-header-profile-link"
         data-testid="header-profile-link"
+        aria-label="自分のプロフィール"
       >
         <AvatarIcon :src="auth.currentUser.avatar_url" :size="28" testid="header-avatar-image" />
-        {{ auth.currentUser.display_name }}
       </RouterLink>
 
       <div v-if="auth.currentUser && receivedRequests.length > 0" class="app-header-requests">
@@ -58,7 +76,7 @@ async function handleLogout() {
           :aria-expanded="showRequestsDropdown"
           @click="toggleRequestsDropdown"
         >
-          🔔 届いたリクエスト {{ receivedRequests.length }}
+          届いたリクエスト {{ receivedRequests.length }}
         </button>
         <div
           v-if="showRequestsDropdown"

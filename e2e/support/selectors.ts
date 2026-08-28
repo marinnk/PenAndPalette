@@ -33,6 +33,8 @@ export const header = {
   logoutButton: (page: Page) => page.getByTestId('header-logout-button'),
   profileLink: (page: Page) => page.getByTestId('header-profile-link'),
   requestBadge: (page: Page) => page.getByTestId('header-request-badge'),
+  searchInput: (page: Page) => page.getByTestId('header-search-input'),
+  searchSubmit: (page: Page) => page.getByTestId('header-search-submit'),
 }
 
 export const timeline = {

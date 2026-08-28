@@ -41,32 +41,43 @@ beforeEach(() => {
 })
 
 describe('AppHeader', () => {
-  it('ログイン中利用者の表示名から自分のプロフィールへリンクする', async () => {
+  it('アイコンから自分のプロフィールへリンクする（表示名は出さない）', async () => {
     const { router } = renderAppHeader()
     await router.isReady()
 
-    const link = screen.getByTestId('header-profile-link')
-    expect(link).toHaveTextContent('太郎')
+    expect(screen.queryByText('太郎')).not.toBeInTheDocument()
 
-    await fireEvent.click(link)
+    await fireEvent.click(screen.getByTestId('header-profile-link'))
     await waitFor(() => {
       expect(router.currentRoute.value.name).toBe('profile')
       expect(router.currentRoute.value.params.id).toBe('1')
     })
   })
 
-  it('検索リンクから検索画面へ遷移する', async () => {
+  it('検索入力欄にキーワードを入力して実行すると検索画面へ ?q= 付きで遷移する', async () => {
     const { router } = renderAppHeader()
     await router.isReady()
 
-    await fireEvent.click(screen.getByTestId('header-search-link'))
+    await fireEvent.update(screen.getByTestId('header-search-input'), '次郎')
+    await fireEvent.click(screen.getByTestId('header-search-submit'))
 
     await waitFor(() => {
       expect(router.currentRoute.value.name).toBe('user-search')
+      expect(router.currentRoute.value.query.q).toBe('次郎')
     })
   })
 
-  it('アイコン画像が設定されている場合は表示名の横に表示する', async () => {
+  it('検索キーワードが空白のみのときは遷移しない', async () => {
+    const { router } = renderAppHeader()
+    await router.isReady()
+
+    await fireEvent.update(screen.getByTestId('header-search-input'), '   ')
+    await fireEvent.click(screen.getByTestId('header-search-submit'))
+
+    expect(router.currentRoute.value.name).toBe('timeline')
+  })
+
+  it('アイコン画像が設定されている場合はプロフィールリンクに表示する', async () => {
     const { router } = renderAppHeader('https://example.com/avatar.jpg')
     await router.isReady()
 
@@ -109,7 +120,7 @@ describe('AppHeader', () => {
     expect(screen.queryByTestId('header-request-badge')).not.toBeInTheDocument()
   })
 
-  it('届いたリクエストがある場合は名前の横に件数付きの通知バッジを表示する', async () => {
+  it('届いたリクエストがある場合は件数付きの通知バッジを🔔絵文字なしで表示する', async () => {
     vi.mocked(apiClient.get).mockResolvedValue({
       data: [
         {
@@ -124,7 +135,9 @@ describe('AppHeader', () => {
     renderAppHeader()
 
     await waitFor(() => {
-      expect(screen.getByTestId('header-request-badge')).toHaveTextContent('届いたリクエスト 1')
+      const badge = screen.getByTestId('header-request-badge')
+      expect(badge).toHaveTextContent('届いたリクエスト 1')
+      expect(badge.textContent).not.toContain('🔔')
     })
   })
 
