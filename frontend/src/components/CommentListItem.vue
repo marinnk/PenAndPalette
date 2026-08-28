@@ -156,6 +156,7 @@ function onDeleteClick() {
         v-model="editContent"
         maxlength="280"
         rows="2"
+        aria-label="コメントを編集"
         :data-testid="`comment-edit-content-${comment.id}`"
       ></textarea>
       <p class="post-compose-counter">{{ editContent.length }}/280</p>

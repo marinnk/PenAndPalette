@@ -15,7 +15,12 @@ const { keyword, users, loading, error, hasSearched, search } = useUserSearch()
       <BackLink :to="{ name: 'timeline' }" label="← タイムラインに戻る" testid="back-to-timeline" />
 
       <form class="user-search-form" @submit.prevent="search">
-        <input v-model="keyword" type="text" data-testid="user-search-keyword" />
+        <input
+          v-model="keyword"
+          type="text"
+          aria-label="ユーザー名・表示名で検索"
+          data-testid="user-search-keyword"
+        />
         <button
           type="submit"
           class="form-submit"
