@@ -7,6 +7,20 @@ variable "github_repository" {
   default     = "marinnk/PenAndPalette"
 }
 
+variable "github_subject_claims" {
+  description = <<-EOT
+    信頼ポリシーの token.actions.githubusercontent.com:sub にマッチさせるパターン（StringLike、OR）。
+    このアカウント/組織が「Customize the OIDC subject claims」で不変ID（owner@<id>/repo@<id>）を
+    有効にしている場合、sub は `repo:marinnk/PenAndPalette:...` ではなく
+    `repo:marinnk@99700676/PenAndPalette@1341790095:...` になるため、両形式を許可する。
+  EOT
+  type        = list(string)
+  default = [
+    "repo:marinnk/PenAndPalette:*",
+    "repo:marinnk@99700676/PenAndPalette@1341790095:*",
+  ]
+}
+
 variable "create_github_oidc_provider" {
   description = <<-EOT
     GitHub Actions 用の IAM OIDC プロバイダを作成するか。アカウントに既に
@@ -45,11 +59,12 @@ data "aws_iam_policy_document" "github_deploy_assume" {
       variable = "token.actions.githubusercontent.com:aud"
       values   = ["sts.amazonaws.com"]
     }
-    # このリポジトリからの実行のみ許可（ブランチ・環境は問わない = workflow_dispatch 前提）
+    # このリポジトリからの実行のみ許可（ブランチ・環境は問わない = workflow_dispatch 前提）。
+    # 不変IDが有効なアカウントでは sub が owner@<id>/repo@<id> 形式になるため両形式を許可する。
     condition {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${var.github_repository}:*"]
+      values   = var.github_subject_claims
     }
   }
 }
