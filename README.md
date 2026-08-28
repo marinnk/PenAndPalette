@@ -53,4 +53,4 @@
 
 テストは backend（pytest-django）・frontend（Vitest）・E2E（Playwright scenarios）を整備済みで、Lint／テスト／ビルド／E2E を PR ごとに GitHub Actions（[.github/workflows/ci.yml](.github/workflows/ci.yml)）で自動実行しています。E2E の performance トラック（`e2e/performance`、ブラウザ実測タイミング）は手動実行です。k6 負荷試験・Lighthouse 監査（`perf-tests/`）はテンプレートのみで未整備です。
 
-本番デプロイは AWS 構成を [`terraform/`](terraform/) にコード化し、バックエンドを本番設定に対応させ済み（[インフラ構成書](docs/infrastructure-design.md)にデプロイ手順あり）。実際の `terraform apply`／イメージ push は未実施です。
+本番デプロイは AWS 構成を [`terraform/`](terraform/) にコード化し、バックエンドを本番設定に対応させ、イメージビルド〜配信を GitHub Actions（`.github/workflows/deploy.yml`、手動実行・OIDC 認証）にまとめ済み（[インフラ構成書](docs/infrastructure-design.md)にデプロイ手順あり）。実際の `terraform apply`／デプロイ実行は未実施です。

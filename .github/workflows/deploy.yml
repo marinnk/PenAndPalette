@@ -1,0 +1,110 @@
+name: Deploy
+
+# 手動実行のみ（学習用途・検証後 terraform destroy する運用のため、main push では自動デプロイしない）。
+# 事前準備は docs/infrastructure-design.md「7.7 GitHub Actions での自動デプロイ」を参照。
+on:
+  workflow_dispatch:
+
+concurrency: deploy # 同時デプロイを防ぐ
+
+permissions:
+  id-token: write # OIDC で AWS ロールを AssumeRole する
+  contents: read
+
+env:
+  AWS_REGION: ap-northeast-1
+  PROJECT_NAME: pen-and-palette
+
+jobs:
+  deploy:
+    name: Build image, deploy ECS, publish frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # terraform state はローカル管理でこのワークフローからは参照できないため、
+      # リソース名は project_name 規約から導出し、CloudFront ID はオリジンのバケット名から引く。
+      - name: Resolve resource names
+        id: names
+        run: |
+          set -euo pipefail
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          ECR_URL="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${PROJECT_NAME}-backend"
+          FRONTEND_BUCKET="${PROJECT_NAME}-frontend-${ACCOUNT_ID}"
+          CF=$(aws cloudfront list-distributions \
+            --query "DistributionList.Items[?Origins.Items[?contains(DomainName, '${FRONTEND_BUCKET}')]] | [0].{id: Id, domain: DomainName}" \
+            --output json)
+          CF_ID=$(echo "$CF" | jq -r '.id // empty')
+          CF_DOMAIN=$(echo "$CF" | jq -r '.domain // empty')
+          if [ -z "$CF_ID" ]; then
+            echo "CloudFront ディストリビューションが見つかりません。先に terraform apply を実行してください。" >&2
+            exit 1
+          fi
+          {
+            echo "ecr_url=$ECR_URL"
+            echo "frontend_bucket=$FRONTEND_BUCKET"
+            echo "cloudfront_id=$CF_ID"
+            echo "cloudfront_domain=$CF_DOMAIN"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Log in to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      # ECS タスク定義は :latest を参照する（terraform の backend_image_tag 既定）。
+      # :latest を更新しつつ、追跡用に commit SHA タグも push する。
+      - name: Build and push backend image (linux/arm64)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ steps.names.outputs.ecr_url }}:latest
+            ${{ steps.names.outputs.ecr_url }}:${{ github.sha }}
+
+      - name: Force new ECS deployment and wait
+        run: |
+          set -euo pipefail
+          aws ecs update-service \
+            --cluster "${PROJECT_NAME}-cluster" \
+            --service "${PROJECT_NAME}-backend" \
+            --force-new-deployment >/dev/null
+          echo "Waiting for the ECS service to stabilize..."
+          aws ecs wait services-stable \
+            --cluster "${PROJECT_NAME}-cluster" \
+            --services "${PROJECT_NAME}-backend"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build and publish frontend
+        working-directory: frontend
+        run: |
+          set -euo pipefail
+          npm ci
+          # API は同一オリジンの /api/* を叩くため baseURL は空にする
+          VITE_API_BASE_URL="" npm run build
+          aws s3 sync dist/ "s3://${{ steps.names.outputs.frontend_bucket }}" --delete
+
+      - name: Invalidate CloudFront cache
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id "${{ steps.names.outputs.cloudfront_id }}" \
+            --paths "/*" >/dev/null
+
+      - name: Summary
+        run: |
+          echo "### Deploy 完了 :rocket:" >> "$GITHUB_STEP_SUMMARY"
+          echo "- https://${{ steps.names.outputs.cloudfront_domain }}" >> "$GITHUB_STEP_SUMMARY"

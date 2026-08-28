@@ -35,3 +35,8 @@ output "ecs_cluster_name" {
 output "ecs_service_name" {
   value = aws_ecs_service.backend.name
 }
+
+output "github_deploy_role_arn" {
+  description = ".github/workflows/deploy.yml の AWS_DEPLOY_ROLE_ARN（Variables）に設定する値"
+  value       = aws_iam_role.github_deploy.arn
+}
